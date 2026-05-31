@@ -1,1 +1,5 @@
-document.body.innerHTML = "<h1>Hello from main.jsx</h1>";
+import ReactDOM from "react-dom/client";
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <h1>React OK</h1>
+);
