@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -22,13 +22,16 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
-// ---------------- map controller (核心) ----------------
-function MapSync({ position, follow }) {
+// ---------------- map controller ----------------
+function MapController({ position, follow }) {
   const map = useMap();
 
   useEffect(() => {
+    // 🧠 只有 follow ON 才移動
     if (follow && position) {
-      map.setView(position, map.getZoom());
+      map.setView(position, map.getZoom(), {
+        animate: true
+      });
     }
   }, [position, follow, map]);
 
@@ -42,10 +45,9 @@ export default function App() {
   ]);
 
   const [accuracy, setAccuracy] = useState(null);
-
   const [follow, setFollow] = useState(true);
 
-  // 📍 GPS
+  // 📍 GPS ONLY UPDATE STATE（不控制 map！）
   useEffect(() => {
     if (!navigator.geolocation) return;
 
@@ -82,7 +84,7 @@ export default function App() {
         🎯 精度: {accuracy ? Math.round(accuracy) + "m" : "-"}
       </div>
 
-      {/* 🎯 回到我（100%有效） */}
+      {/* 🎯 回到我 */}
       <button
         onClick={() => setFollow(true)}
         style={{
@@ -102,7 +104,7 @@ export default function App() {
 
       {/* 🔘 跟隨切換 */}
       <button
-        onClick={() => setFollow((v) => !v)}
+        onClick={() => setFollow(v => !v)}
         style={{
           position: "absolute",
           bottom: 80,
@@ -130,8 +132,8 @@ export default function App() {
           <Popup>你在這裡</Popup>
         </Marker>
 
-        {/* 🧠 關鍵控制層 */}
-        <MapSync position={position} follow={follow} />
+        {/* 🧠 唯一控制地圖移動的地方 */}
+        <MapController position={position} follow={follow} />
       </MapContainer>
     </div>
   );
