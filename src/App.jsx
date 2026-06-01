@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -9,6 +9,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import S2 from "s2-geometry";
 
 // Leaflet icon fix
 delete L.Icon.Default.prototype._getIconUrl;
@@ -48,7 +49,7 @@ function Recenter({ position }) {
         right: 20,
         zIndex: 9999,
         padding: "10px 12px",
-        borderRadius: "10px",
+        borderRadius: 10,
         background: "white",
         border: "none",
         boxShadow: "0 0 8px rgba(0,0,0,0.25)"
@@ -59,23 +60,13 @@ function Recenter({ position }) {
   );
 }
 
-// 🌐 把 lat/lng 轉成 grid cell（簡化版）
-function gridKey(lat, lng, precision) {
-  const factor = Math.pow(2, precision);
-  return [
-    Math.floor(lat * factor),
-    Math.floor(lng * factor)
-  ];
-}
+// 🧭 S2 cell → polygon
+function getCellPolygon(lat, lng, level) {
+  const key = S2.latLngToCellId(lat, lng, level);
+  const cell = S2.S2Cell.FromHilbertQuadKey(key);
 
-// 🟨 產生 grid polygon
-function createCell(lat, lng, size) {
-  return [
-    [lat, lng],
-    [lat + size, lng],
-    [lat + size, lng + size],
-    [lat, lng + size]
-  ];
+  const vertices = cell.getCornerLatLngs();
+  return vertices.map(v => [v.lat, v.lng]);
 }
 
 export default function App() {
@@ -87,7 +78,7 @@ export default function App() {
   const [accuracy, setAccuracy] = useState(null);
   const [speed, setSpeed] = useState(null);
 
-  // 📍 POI（示範資料）
+  // 📍 POI（可擴展）
   const pois = [
     { name: "台北101", pos: [25.03397, 121.5645] },
     { name: "信義商圈", pos: [25.035, 121.566] },
@@ -111,12 +102,23 @@ export default function App() {
   const lat = position[0];
   const lng = position[1];
 
-  // 🟨 L17 / L14 grid size（approx lat/lng degree）
-  const L17 = 0.0005; // very small grid
-  const L14 = 0.002;  // larger grid
+  // 🧭 S2 Levels（正式定義）
+  const level14 = 14;
+  const level17 = 17;
 
-  const grid17 = createCell(lat, lng, L17);
-  const grid14 = createCell(lat, lng, L14);
+  // 🟨 S2 cells
+  const cell14 = useMemo(
+    () => getCellPolygon(lat, lng, level14),
+    [lat, lng]
+  );
+
+  const cell17 = useMemo(
+    () => getCellPolygon(lat, lng, level17),
+    [lat, lng]
+  );
+
+  const cellId14 = S2.latLngToCellId(lat, lng, level14);
+  const cellId17 = S2.latLngToCellId(lat, lng, level17);
 
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
@@ -130,19 +132,17 @@ export default function App() {
           background: "white",
           padding: 10,
           borderRadius: 10,
-          fontSize: 13
+          fontSize: 13,
+          minWidth: 180
         }}
       >
         <div>Lat: {lat.toFixed(6)}</div>
         <div>Lng: {lng.toFixed(6)}</div>
-        <div>
-          GPS:{" "}
-          {accuracy ? `${Math.round(accuracy)}m` : "loading"}
-        </div>
-        <div>
-          Speed:{" "}
-          {speed ? `${(speed * 3.6).toFixed(1)} km/h` : "0"}
-        </div>
+        <div>GPS: {accuracy ? `${Math.round(accuracy)}m` : "-"}</div>
+        <div>Speed: {speed ? `${(speed * 3.6).toFixed(1)} km/h` : "0"}</div>
+        <hr />
+        <div>🟨 L14: {cellId14}</div>
+        <div>🟨 L17: {cellId17}</div>
       </div>
 
       <MapContainer
@@ -156,30 +156,30 @@ export default function App() {
 
         <Fly position={position} />
 
-        {/* 📍 POI layer */}
+        {/* 📍 POI */}
         {pois.map((p, i) => (
           <Marker key={i} position={p.pos}>
             <Popup>{p.name}</Popup>
           </Marker>
         ))}
 
-        {/* 🟨 L17 grid */}
+        {/* 🟨 S2 L14 */}
         <Polygon
-          positions={grid17}
-          pathOptions={{
-            color: "yellow",
-            weight: 1,
-            fillOpacity: 0.1
-          }}
-        />
-
-        {/* 🟨 L14 grid */}
-        <Polygon
-          positions={grid14}
+          positions={cell14}
           pathOptions={{
             color: "orange",
             weight: 2,
             fillOpacity: 0.08
+          }}
+        />
+
+        {/* 🟨 S2 L17 */}
+        <Polygon
+          positions={cell17}
+          pathOptions={{
+            color: "yellow",
+            weight: 1,
+            fillOpacity: 0.12
           }}
         />
 
