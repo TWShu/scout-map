@@ -62,31 +62,6 @@ function copyText(text) {
   alert("已複製座標");
 }
 
-// ---------------- MAP CONTROL ----------------
-function MapController({ position, follow, radar }) {
-  const map = useMap();
-
-  // 回到我 / 跟隨
-  useEffect(() => {
-    if (follow && position) {
-      map.flyTo(position, 18, { duration: 0.8 });
-    }
-  }, [position, follow, map]);
-
-  // 雷達模式：輕微抖動視覺（假掃描感）
-  useEffect(() => {
-    if (!radar) return;
-
-    const interval = setInterval(() => {
-      map.panBy([0, 0]); // trigger render
-    }, 800);
-
-    return () => clearInterval(interval);
-  }, [radar, map]);
-
-  return null;
-}
-
 // ---------------- MAP EVENTS ----------------
 function MapEvents({ setFollow }) {
   useMapEvents({
@@ -94,7 +69,6 @@ function MapEvents({ setFollow }) {
       setFollow(false);
     }
   });
-
   return null;
 }
 
@@ -124,12 +98,13 @@ function AddMushroom({ enabled }) {
 export default function App() {
   const [position, setPosition] = useState([25.033964, 121.564468]);
   const [follow, setFollow] = useState(true);
-  const [radar, setRadar] = useState(false);
   const [addMode, setAddMode] = useState(false);
-
+  const [radar, setRadar] = useState(false);
   const [mushrooms, setMushrooms] = useState([]);
-  const [focusTarget, setFocusTarget] = useState(null);
 
+  const mapRef = useRef(null);
+
+  // ⭐ 收藏
   const [favorites, setFavorites] = useState(() => {
     const saved = localStorage.getItem("fav");
     return saved ? JSON.parse(saved) : [];
@@ -182,17 +157,14 @@ export default function App() {
     });
   }, [mushrooms, position]);
 
-  // 🔥 雷達動畫圈
-  const radarRadius = useRef(10);
-  const [radarTick, setRadarTick] = useState(0);
+  // radar animation
+  const [radarRadius, setRadarRadius] = useState(10);
 
   useEffect(() => {
     if (!radar) return;
 
     const i = setInterval(() => {
-      radarRadius.current += 25;
-      if (radarRadius.current > 200) radarRadius.current = 10;
-      setRadarTick((t) => t + 1);
+      setRadarRadius((r) => (r > 200 ? 10 : r + 20));
     }, 200);
 
     return () => clearInterval(i);
@@ -205,7 +177,12 @@ export default function App() {
       <div style={{ position: "absolute", zIndex: 9999, top: 10, right: 10, background: "white", padding: 10 }}>
         <div>🍄 {mushrooms.length}</div>
 
-        <button onClick={() => { setFollow(true); setFocusTarget(position); }}>
+        <button onClick={() => {
+          setFollow(true);
+          if (mapRef.current) {
+            mapRef.current.flyTo(position, 18, { duration: 0.8 });
+          }
+        }}>
           🎯 回到我
         </button>
 
@@ -228,14 +205,20 @@ export default function App() {
         </button>
       </div>
 
-      {/* 菇列表 */}
+      {/* 列表 */}
       <div style={{ position: "absolute", top: 140, right: 10, zIndex: 9999, background: "white", padding: 10, width: 180 }}>
         <b>附近菇點</b>
 
         {sorted.map((m) => (
           <div
             key={m.id}
-            onClick={() => setFocusTarget([m.lat, m.lng])}
+            onClick={() => {
+              if (mapRef.current) {
+                mapRef.current.flyTo([m.lat, m.lng], 19, {
+                  duration: 0.8
+                });
+              }
+            }}
             style={{ cursor: "pointer", marginTop: 6 }}
           >
             {m.name} {isFav(m.id) && "⭐"}
@@ -243,7 +226,12 @@ export default function App() {
         ))}
       </div>
 
-      <MapContainer center={position} zoom={18} style={{ height: "100%", width: "100%" }}>
+      <MapContainer
+        center={position}
+        zoom={18}
+        style={{ height: "100%", width: "100%" }}
+        whenCreated={(map) => (mapRef.current = map)}
+      >
 
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
@@ -259,7 +247,7 @@ export default function App() {
         {radar && (
           <Circle
             center={position}
-            radius={radarRadius.current}
+            radius={radarRadius}
             pathOptions={{ color: "blue", fillOpacity: 0.1 }}
           />
         )}
@@ -294,12 +282,6 @@ export default function App() {
             </Fragment>
           );
         })}
-
-        <MapController
-          position={position}
-          follow={follow}
-          radar={radar}
-        />
 
       </MapContainer>
     </div>
