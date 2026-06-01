@@ -24,30 +24,21 @@ L.Icon.Default.mergeOptions({
 });
 
 // ------------------------------
-// S2 fallback（避免 crash）
+// fake S2（線上安全版）
 // ------------------------------
-let S2 = null;
-try {
-  S2 = require("s2-geometry");
-} catch (e) {
-  console.log("S2 fallback mode");
-}
-
-function fakeCell(lat, lng, level) {
+function fakeS2(lat, lng, level) {
   const scale = level === 14 ? 10000 : 100000;
-  return `${Math.floor(lat * scale)}_${Math.floor(lng * scale)}_L${level}`;
+  return `${Math.floor(lat * scale)}:${Math.floor(lng * scale)}:L${level}`;
 }
 
 // ------------------------------
-// 地圖初始化（避免跳動）
+// 不跳畫面初始化
 // ------------------------------
 function MapInit({ position }) {
   const map = useMap();
 
   useEffect(() => {
-    map.setView(position, map.getZoom(), {
-      animate: false
-    });
+    map.setView(position, map.getZoom(), { animate: false });
   }, []);
 
   return null;
@@ -61,9 +52,7 @@ function FollowMode({ position, follow }) {
 
   useEffect(() => {
     if (follow) {
-      map.setView(position, map.getZoom(), {
-        animate: false
-      });
+      map.setView(position, map.getZoom(), { animate: false });
     }
   }, [position, follow]);
 
@@ -79,9 +68,7 @@ function Recenter({ position }) {
   return (
     <button
       onClick={() =>
-        map.setView(position, map.getZoom(), {
-          animate: false
-        })
+        map.setView(position, map.getZoom(), { animate: false })
       }
       style={{
         position: "fixed",
@@ -113,7 +100,7 @@ export default function App() {
   const [follow, setFollow] = useState(false);
   const [hudOpen, setHudOpen] = useState(true);
 
-  // 🌼 POI（花 / 菇）
+  // 🌼 POI
   const [pois, setPois] = useState([
     {
       id: 1,
@@ -156,32 +143,20 @@ export default function App() {
   const lat = position[0];
   const lng = position[1];
 
-  // 🟨 S2
-  const cell14 = S2?.latLngToKey
-    ? S2.latLngToKey(lat, lng, 14)
-    : fakeCell(lat, lng, 14);
+  // 🧭 fake S2
+  const cell14 = fakeS2(lat, lng, 14);
+  const cell17 = fakeS2(lat, lng, 17);
 
-  const cell17 = S2?.latLngToKey
-    ? S2.latLngToKey(lat, lng, 17)
-    : fakeCell(lat, lng, 17);
-
-  // 🌡 heat（附近 POI）
+  // 🌡 heat
   const heat = useMemo(() => {
-    let count = 0;
-
-    pois.forEach((p) => {
+    return pois.filter((p) => {
       const dx = p.pos[0] - lat;
       const dy = p.pos[1] - lng;
-
-      if (Math.sqrt(dx * dx + dy * dy) < 0.002) {
-        count++;
-      }
-    });
-
-    return count;
+      return Math.sqrt(dx * dx + dy * dy) < 0.002;
+    }).length;
   }, [lat, lng, pois]);
 
-  // 🎮 interact
+  // 🎮 interaction
   function interactPOI(id) {
     setPois((prev) =>
       prev.map((p) => {
@@ -196,7 +171,7 @@ export default function App() {
     );
   }
 
-  // ⏳ cooldown timer
+  // ⏳ cooldown
   useEffect(() => {
     const timer = setInterval(() => {
       setPois((prev) =>
@@ -222,7 +197,6 @@ export default function App() {
           zIndex: 9999,
           background: "white",
           borderRadius: 10,
-          boxShadow: "0 0 10px rgba(0,0,0,0.2)",
           width: hudOpen ? 220 : 40,
           overflow: "hidden",
           transition: "0.2s"
@@ -259,19 +233,18 @@ export default function App() {
 
             <div>🌡 Heat: {heat}</div>
 
-            <hr />
-
             <button
               onClick={() => setFollow(!follow)}
               style={{
                 width: "100%",
+                marginTop: 8,
                 padding: 6,
                 borderRadius: 8,
                 border: "none",
                 background: follow ? "#4ade80" : "#e5e7eb"
               }}
             >
-              {follow ? "📍 跟隨模式" : "🧭 自由模式"}
+              {follow ? "📍 跟隨" : "🧭 自由"}
             </button>
           </div>
         )}
@@ -288,7 +261,7 @@ export default function App() {
         <MapInit position={position} />
         <FollowMode position={position} follow={follow} />
 
-        {/* 🌼 POI（重點：狀態顏色） */}
+        {/* 🌼 POI */}
         {pois.map((p) => {
           const isReady = p.cooldown === 0;
 
@@ -324,16 +297,9 @@ export default function App() {
               <Popup>
                 <b>{p.name}</b>
                 <br />
-                {p.type === "flower" ? "🌼 花點" : "🍄 菇點"}
+                {p.type}
                 <br />
-
-                {isReady ? (
-                  <span style={{ color: "green" }}>✅ 可用</span>
-                ) : (
-                  <span style={{ color: "red" }}>
-                    ⏳ 冷卻 {p.cooldown}s
-                  </span>
-                )}
+                {isReady ? "✅ 可用" : `⏳ ${p.cooldown}s`}
               </Popup>
             </Marker>
           );
