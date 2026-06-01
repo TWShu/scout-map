@@ -26,6 +26,7 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
+// ---------------- icon ----------------
 const mushroomIcon = L.divIcon({
   html: "🍄",
   className: "",
@@ -51,14 +52,12 @@ function getDistance(lat1, lng1, lat2, lng2) {
 
 // ---------------- MAIN ----------------
 export default function App() {
+  const mapRef = useRef(null);
+
   const [position, setPosition] = useState([25.033964, 121.564468]);
   const [mushrooms, setMushrooms] = useState([]);
   const [addMode, setAddMode] = useState(false);
-  const [radar, setRadar] = useState(false);
 
-  const mapRef = useRef(null);
-
-  // ⭐ 收藏
   const [favorites, setFavorites] = useState(() => {
     const saved = localStorage.getItem("fav");
     return saved ? JSON.parse(saved) : [];
@@ -77,13 +76,10 @@ export default function App() {
     });
   };
 
-  // ---------------- GPS ----------------
+  // ---------------- GPS (只更新 state，不控制地圖) ----------------
   useEffect(() => {
     const id = navigator.geolocation.watchPosition((pos) => {
-      setPosition([
-        pos.coords.latitude,
-        pos.coords.longitude
-      ]);
+      setPosition([pos.coords.latitude, pos.coords.longitude]);
     });
 
     return () => navigator.geolocation.clearWatch(id);
@@ -92,23 +88,22 @@ export default function App() {
   // ---------------- Firestore ----------------
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "mushrooms"), (snap) => {
-      setMushrooms(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-      );
+      setMushrooms(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
 
     return () => unsub();
   }, []);
 
-  // ---------------- MAP CONTROL CORE ----------------
+  // ---------------- SINGLE MAP CONTROL ----------------
   const moveMap = (latlng, zoom = 18) => {
     if (!mapRef.current) return;
+
     mapRef.current.flyTo(latlng, zoom, {
       duration: 0.8
     });
   };
 
-  // ---------------- ADD MUSHROOM ----------------
+  // ---------------- ADD ----------------
   function AddMushroom() {
     useMapEvents({
       async contextmenu(e) {
@@ -133,39 +128,20 @@ export default function App() {
   const sorted = useMemo(() => {
     return [...mushrooms].sort((a, b) => {
       const da = getDistance(position[0], position[1], a.lat, a.lng);
-      const db = getDistance(position[0], position[1], b.lat, b.lng);
-      return da - db;
+      const dbv = getDistance(position[0], position[1], b.lat, b.lng);
+      return da - dbv;
     });
   }, [mushrooms, position]);
-
-  // radar
-  const [radarRadius, setRadarRadius] = useState(10);
-
-  useEffect(() => {
-    if (!radar) return;
-
-    const i = setInterval(() => {
-      setRadarRadius((r) => (r > 200 ? 10 : r + 20));
-    }, 200);
-
-    return () => clearInterval(i);
-  }, [radar]);
 
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
 
-      {/* 控制 */}
+      {/* UI */}
       <div style={{ position: "absolute", zIndex: 9999, top: 10, right: 10, background: "white", padding: 10 }}>
         <div>🍄 {mushrooms.length}</div>
 
         <button onClick={() => moveMap(position, 18)}>
           🎯 回到我
-        </button>
-
-        <br />
-
-        <button onClick={() => setRadar(v => !v)}>
-          雷達 {radar ? "ON" : "OFF"}
         </button>
 
         <br />
@@ -194,28 +170,21 @@ export default function App() {
         center={position}
         zoom={18}
         style={{ height: "100%", width: "100%" }}
-        whenCreated={(map) => (mapRef.current = map)}
+        whenCreated={(map) => {
+          mapRef.current = map;
+        }}
       >
 
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
         <AddMushroom />
 
-        {/* 玩家 */}
+        {/* player */}
         <Marker position={position}>
           <Popup>你在這裡</Popup>
         </Marker>
 
-        {/* 雷達 */}
-        {radar && (
-          <Circle
-            center={position}
-            radius={radarRadius}
-            pathOptions={{ color: "blue", fillOpacity: 0.1 }}
-          />
-        )}
-
-        {/* 菇 */}
+        {/* mushrooms */}
         {sorted.map((m) => {
           const d = getDistance(position[0], position[1], m.lat, m.lng);
 
@@ -231,7 +200,11 @@ export default function App() {
 
                   <hr />
 
-                  <button onClick={() => navigator.clipboard.writeText(`${m.lat},${m.lng}`)}>
+                  <button
+                    onClick={() =>
+                      navigator.clipboard.writeText(`${m.lat},${m.lng}`)
+                    }
+                  >
                     📋 複製座標
                   </button>
 
@@ -255,4 +228,4 @@ export default function App() {
       </MapContainer>
     </div>
   );
-                    }
+}
