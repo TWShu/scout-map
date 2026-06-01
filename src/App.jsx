@@ -10,7 +10,15 @@ import {
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
-// ---------------- icon fix ----------------
+// 🔥 Firebase
+import { initializeApp } from "firebase/app";
+import {
+  getFirestore,
+  collection,
+  onSnapshot
+} from "firebase/firestore";
+
+// ---------------- Leaflet icon fix ----------------
 delete L.Icon.Default.prototype._getIconUrl;
 
 L.Icon.Default.mergeOptions({
@@ -22,16 +30,23 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
+// ---------------- Firebase init ----------------
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
 // ---------------- map controller ----------------
 function MapController({ position, follow }) {
   const map = useMap();
 
   useEffect(() => {
-    // 🧠 只有 follow ON 才移動
-    if (follow && position) {
-      map.setView(position, map.getZoom(), {
-        animate: true
-      });
+    if (follow) {
+      map.setView(position);
     }
   }, [position, follow, map]);
 
@@ -44,45 +59,37 @@ export default function App() {
     121.564468
   ]);
 
-  const [accuracy, setAccuracy] = useState(null);
   const [follow, setFollow] = useState(true);
+  const [mushrooms, setMushrooms] = useState([]);
 
-  // 📍 GPS ONLY UPDATE STATE（不控制 map！）
+  // 📍 GPS
   useEffect(() => {
-    if (!navigator.geolocation) return;
-
-    const id = navigator.geolocation.watchPosition((pos) => {
+    navigator.geolocation.watchPosition((pos) => {
       setPosition([
         pos.coords.latitude,
         pos.coords.longitude
       ]);
+    });
+  }, []);
 
-      setAccuracy(pos.coords.accuracy);
+  // 🍄 Firebase 即時讀取
+  useEffect(() => {
+    const ref = collection(db, "mushrooms");
+
+    const unsub = onSnapshot(ref, (snap) => {
+      const data = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data()
+      }));
+
+      setMushrooms(data);
     });
 
-    return () => navigator.geolocation.clearWatch(id);
+    return () => unsub();
   }, []);
 
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
-
-      {/* 🧭 HUD */}
-      <div
-        style={{
-          position: "absolute",
-          top: 10,
-          left: 10,
-          zIndex: 99999,
-          background: "white",
-          padding: 10,
-          borderRadius: 10,
-          fontSize: 12
-        }}
-      >
-        📍 {position[0].toFixed(6)}, {position[1].toFixed(6)}
-        <br />
-        🎯 精度: {accuracy ? Math.round(accuracy) + "m" : "-"}
-      </div>
 
       {/* 🎯 回到我 */}
       <button
@@ -92,17 +99,16 @@ export default function App() {
           bottom: 20,
           right: 20,
           zIndex: 99999,
-          padding: "12px 16px",
-          borderRadius: 12,
-          border: "none",
+          padding: 12,
           background: "#111",
-          color: "white"
+          color: "white",
+          borderRadius: 12
         }}
       >
         🎯 回到我
       </button>
 
-      {/* 🔘 跟隨切換 */}
+      {/* 🔘 跟隨 */}
       <button
         onClick={() => setFollow(v => !v)}
         style={{
@@ -110,11 +116,10 @@ export default function App() {
           bottom: 80,
           right: 20,
           zIndex: 99999,
-          padding: "10px 14px",
-          borderRadius: 12,
-          border: "none",
+          padding: 10,
           background: follow ? "green" : "gray",
-          color: "white"
+          color: "white",
+          borderRadius: 12
         }}
       >
         {follow ? "跟隨 ON" : "跟隨 OFF"}
@@ -128,11 +133,23 @@ export default function App() {
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
+        {/* 📍 玩家 */}
         <Marker position={position}>
           <Popup>你在這裡</Popup>
         </Marker>
 
-        {/* 🧠 唯一控制地圖移動的地方 */}
+        {/* 🍄 Firebase POI */}
+        {mushrooms.map((m) => (
+          <Marker
+            key={m.id}
+            position={[m.lat, m.lng]}
+          >
+            <Popup>
+              🍄 {m.name || "菇點"}
+            </Popup>
+          </Marker>
+        ))}
+
         <MapController position={position} follow={follow} />
       </MapContainer>
     </div>
