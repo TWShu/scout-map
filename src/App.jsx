@@ -10,7 +10,7 @@ import {
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
-// ---------------- Leaflet icon fix ----------------
+// ---------------- icon fix ----------------
 delete L.Icon.Default.prototype._getIconUrl;
 
 L.Icon.Default.mergeOptions({
@@ -22,128 +22,118 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
-// ---------------- Map Controls ----------------
-function MapControls({ position }) {
+// ---------------- helper: map fly ----------------
+function FlyToMe({ position }) {
   const map = useMap();
 
-  return (
-    <>
-      {/* 🎯 回到我 */}
-      <button
-        onClick={() => map.setView(position, 18, { animate: true })}
-        style={{
-          position: "absolute",
-          bottom: 20,
-          right: 20,
-          zIndex: 9999,
-          padding: "10px 14px",
-          borderRadius: 12,
-          border: "none",
-          background: "#111",
-          color: "white"
-        }}
-      >
-        🎯 回到我
-      </button>
+  useEffect(() => {
+    if (position) {
+      map.setView(position, 18);
+    }
+  }, [position]);
 
-      {/* 🔍 自訂縮放控制 */}
-      <div
-        style={{
-          position: "absolute",
-          top: 10,
-          right: 10,
-          zIndex: 9999,
-          display: "flex",
-          flexDirection: "column",
-          gap: 6
-        }}
-      >
-        <button
-          onClick={() => map.zoomIn()}
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 8,
-            border: "none",
-            fontSize: 18
-          }}
-        >
-          +
-        </button>
-
-        <button
-          onClick={() => map.zoomOut()}
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 8,
-            border: "none",
-            fontSize: 18
-          }}
-        >
-          -
-        </button>
-      </div>
-    </>
-  );
+  return null;
 }
 
-// ---------------- Main App ----------------
 export default function App() {
   const [position, setPosition] = useState([
     25.033964,
     121.564468
   ]);
 
+  const [mapRef, setMapRef] = useState(null);
   const [accuracy, setAccuracy] = useState(null);
-  const [speed, setSpeed] = useState(null);
 
   // 📍 GPS
   useEffect(() => {
-    if (!navigator.geolocation) return;
-
-    const id = navigator.geolocation.watchPosition((pos) => {
+    navigator.geolocation.watchPosition((pos) => {
       setPosition([
         pos.coords.latitude,
         pos.coords.longitude
       ]);
-
       setAccuracy(pos.coords.accuracy);
-      setSpeed(pos.coords.speed);
     });
-
-    return () => navigator.geolocation.clearWatch(id);
   }, []);
 
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
 
-      {/* 🧭 HUD（右上資訊） */}
+      {/* 🧭 HUD（一定看得到） */}
       <div
         style={{
           position: "absolute",
           top: 10,
           left: 10,
-          zIndex: 9999,
+          zIndex: 99999,
           background: "white",
           padding: 10,
           borderRadius: 10,
-          fontSize: 12,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+          fontSize: 12
         }}
       >
-        <div>📍 Lat: {position[0].toFixed(6)}</div>
-        <div>📍 Lng: {position[1].toFixed(6)}</div>
-        <div>🎯 精度: {accuracy ? `${Math.round(accuracy)}m` : "-"}</div>
-        <div>🚀 速度: {speed ? `${speed.toFixed(1)} m/s` : "-"}</div>
+        📍 {position[0].toFixed(6)} , {position[1].toFixed(6)}
+        <br />
+        🎯 精度: {accuracy ? Math.round(accuracy) + "m" : "-"}
       </div>
 
-      {/* 🗺 地圖 */}
+      {/* 🎯 回到我（關鍵：放在 MapContainer 外面） */}
+      <button
+        onClick={() => {
+          if (mapRef) {
+            mapRef.setView(position, 18, {
+              animate: true
+            });
+          }
+        }}
+        style={{
+          position: "absolute",
+          bottom: 20,
+          right: 20,
+          zIndex: 99999,
+          padding: "12px 16px",
+          borderRadius: 12,
+          border: "none",
+          background: "#111",
+          color: "white",
+          fontSize: 14
+        }}
+      >
+        🎯 回到我
+      </button>
+
+      {/* 🔍 zoom */}
+      <div
+        style={{
+          position: "absolute",
+          top: 10,
+          right: 10,
+          zIndex: 99999,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8
+        }}
+      >
+        <button
+          onClick={() => mapRef?.zoomIn()}
+          style={{ width: 40, height: 40 }}
+        >
+          +
+        </button>
+
+        <button
+          onClick={() => mapRef?.zoomOut()}
+          style={{ width: 40, height: 40 }}
+        >
+          -
+        </button>
+      </div>
+
+      {/* 🗺 Map */}
       <MapContainer
         center={position}
         zoom={18}
-        zoomControl={false}   // ❗ 關掉預設 zoom（避免重疊）
         style={{ width: "100%", height: "100%" }}
+        whenCreated={(map) => setMapRef(map)}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
@@ -151,8 +141,7 @@ export default function App() {
           <Popup>你在這裡</Popup>
         </Marker>
 
-        {/* 🧭 控制 UI */}
-        <MapControls position={position} />
+        <FlyToMe position={position} />
       </MapContainer>
     </div>
   );
