@@ -4,12 +4,13 @@ import {
   TileLayer,
   Marker,
   Popup,
+  Polygon,
   useMap
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-// Fix Leaflet icon
+// Leaflet icon fix
 delete L.Icon.Default.prototype._getIconUrl;
 
 L.Icon.Default.mergeOptions({
@@ -21,32 +22,26 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-// 🔥 地圖跟隨使用者（無動畫版本）
-function FollowUser({ position }) {
+function Fly({ position }) {
   const map = useMap();
 
   useEffect(() => {
     if (position) {
-      map.setView(position, map.getZoom(), {
-        animate: false
-      });
+      map.setView(position, map.getZoom(), { animate: false });
     }
   }, [position, map]);
 
   return null;
 }
 
-// 🎯 回到我（瞬間定位）
-function RecenterButton({ position }) {
+function Recenter({ position }) {
   const map = useMap();
 
   return (
     <button
-      onClick={() => {
-        map.setView(position, map.getZoom(), {
-          animate: false
-        });
-      }}
+      onClick={() =>
+        map.setView(position, map.getZoom(), { animate: false })
+      }
       style={{
         position: "fixed",
         bottom: 20,
@@ -54,16 +49,33 @@ function RecenterButton({ position }) {
         zIndex: 9999,
         padding: "10px 12px",
         borderRadius: "10px",
-        border: "none",
         background: "white",
-        boxShadow: "0 0 8px rgba(0,0,0,0.25)",
-        cursor: "pointer",
-        fontSize: "14px"
+        border: "none",
+        boxShadow: "0 0 8px rgba(0,0,0,0.25)"
       }}
     >
       🎯 回到我
     </button>
   );
+}
+
+// 🌐 把 lat/lng 轉成 grid cell（簡化版）
+function gridKey(lat, lng, precision) {
+  const factor = Math.pow(2, precision);
+  return [
+    Math.floor(lat * factor),
+    Math.floor(lng * factor)
+  ];
+}
+
+// 🟨 產生 grid polygon
+function createCell(lat, lng, size) {
+  return [
+    [lat, lng],
+    [lat + size, lng],
+    [lat + size, lng + size],
+    [lat, lng + size]
+  ];
 }
 
 export default function App() {
@@ -74,86 +86,41 @@ export default function App() {
 
   const [accuracy, setAccuracy] = useState(null);
   const [speed, setSpeed] = useState(null);
-  const [heading, setHeading] = useState(0);
 
-  // 📍 GPS tracking
+  // 📍 POI（示範資料）
+  const pois = [
+    { name: "台北101", pos: [25.03397, 121.5645] },
+    { name: "信義商圈", pos: [25.035, 121.566] },
+    { name: "捷運站", pos: [25.0328, 121.5654] }
+  ];
+
+  // GPS
   useEffect(() => {
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        setPosition([
-          pos.coords.latitude,
-          pos.coords.longitude
-        ]);
+    const id = navigator.geolocation.watchPosition((pos) => {
+      setPosition([
+        pos.coords.latitude,
+        pos.coords.longitude
+      ]);
+      setAccuracy(pos.coords.accuracy);
+      setSpeed(pos.coords.speed);
+    });
 
-        setAccuracy(pos.coords.accuracy ?? null);
-        setSpeed(pos.coords.speed ?? null);
-      },
-      (err) => console.error("GPS error:", err),
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 1000
-      }
-    );
-
-    return () => navigator.geolocation.clearWatch(watchId);
+    return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  // 🧭 Compass（安全版）
-  useEffect(() => {
-    const handler = (e) => {
-      if (typeof e.alpha === "number") {
-        setHeading(e.alpha);
-      }
-    };
+  const lat = position[0];
+  const lng = position[1];
 
-    const startCompass = async () => {
-      try {
-        if (
-          typeof DeviceOrientationEvent !== "undefined" &&
-          typeof DeviceOrientationEvent.requestPermission === "function"
-        ) {
-          const res =
-            await DeviceOrientationEvent.requestPermission();
-          if (res === "granted") {
-            window.addEventListener(
-              "deviceorientation",
-              handler,
-              true
-            );
-          }
-        } else {
-          window.addEventListener(
-            "deviceorientation",
-            handler,
-            true
-          );
-        }
-      } catch (e) {
-        console.log("Compass not supported");
-      }
-    };
+  // 🟨 L17 / L14 grid size（approx lat/lng degree）
+  const L17 = 0.0005; // very small grid
+  const L14 = 0.002;  // larger grid
 
-    startCompass();
-
-    return () => {
-      window.removeEventListener(
-        "deviceorientation",
-        handler,
-        true
-      );
-    };
-  }, []);
+  const grid17 = createCell(lat, lng, L17);
+  const grid14 = createCell(lat, lng, L14);
 
   return (
-    <div
-      style={{
-        width: "100vw",
-        height: "100vh",
-        position: "relative"
-      }}
-    >
-      {/* 📊 右上角 HUD */}
+    <div style={{ width: "100vw", height: "100vh" }}>
+      {/* HUD */}
       <div
         style={{
           position: "fixed",
@@ -161,74 +128,63 @@ export default function App() {
           right: 10,
           zIndex: 9999,
           background: "white",
-          padding: "10px 12px",
-          borderRadius: "10px",
-          boxShadow: "0 0 8px rgba(0,0,0,0.25)",
-          fontSize: "13px",
-          minWidth: "170px"
+          padding: 10,
+          borderRadius: 10,
+          fontSize: 13
         }}
       >
+        <div>Lat: {lat.toFixed(6)}</div>
+        <div>Lng: {lng.toFixed(6)}</div>
         <div>
-          <b>Lat:</b> {position[0].toFixed(6)}
+          GPS:{" "}
+          {accuracy ? `${Math.round(accuracy)}m` : "loading"}
         </div>
         <div>
-          <b>Lng:</b> {position[1].toFixed(6)}
-        </div>
-        <div>
-          <b>GPS:</b>{" "}
-          {accuracy != null
-            ? `${Math.round(accuracy)} m`
-            : "loading..."}
-        </div>
-        <div>
-          <b>Speed:</b>{" "}
-          {speed != null
-            ? `${(speed * 3.6).toFixed(1)} km/h`
-            : "0 km/h"}
+          Speed:{" "}
+          {speed ? `${(speed * 3.6).toFixed(1)} km/h` : "0"}
         </div>
       </div>
 
-      {/* 🗺 Map */}
       <MapContainer
         center={position}
         zoom={18}
-        style={{ width: "100%", height: "100%" }}
+        style={{ height: "100%", width: "100%" }}
       >
         <TileLayer
-          attribution="© OpenStreetMap"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        <FollowUser position={position} />
+        <Fly position={position} />
 
-        <Marker position={position}>
-          <Popup>你在這裡</Popup>
-        </Marker>
+        {/* 📍 POI layer */}
+        {pois.map((p, i) => (
+          <Marker key={i} position={p.pos}>
+            <Popup>{p.name}</Popup>
+          </Marker>
+        ))}
 
-        <RecenterButton position={position} />
+        {/* 🟨 L17 grid */}
+        <Polygon
+          positions={grid17}
+          pathOptions={{
+            color: "yellow",
+            weight: 1,
+            fillOpacity: 0.1
+          }}
+        />
+
+        {/* 🟨 L14 grid */}
+        <Polygon
+          positions={grid14}
+          pathOptions={{
+            color: "orange",
+            weight: 2,
+            fillOpacity: 0.08
+          }}
+        />
+
+        <Recenter position={position} />
       </MapContainer>
-
-      {/* 🧭 Compass */}
-      <div
-        style={{
-          position: "fixed",
-          bottom: 20,
-          right: 140,
-          zIndex: 9999,
-          width: 60,
-          height: 60,
-          borderRadius: "50%",
-          background: "white",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 22,
-          transform: `rotate(${heading}deg)`,
-          boxShadow: "0 0 8px rgba(0,0,0,0.25)"
-        }}
-      >
-        🧭
-      </div>
     </div>
   );
 }
