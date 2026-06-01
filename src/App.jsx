@@ -5,7 +5,6 @@ import {
   Marker,
   Popup,
   Circle,
-  useMap,
   useMapEvents
 } from "react-leaflet";
 
@@ -13,12 +12,7 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
 import { db } from "./firebase";
-import {
-  collection,
-  onSnapshot,
-  addDoc,
-  serverTimestamp
-} from "firebase/firestore";
+import { collection, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
 
 // ---------------- Leaflet fix ----------------
 delete L.Icon.Default.prototype._getIconUrl;
@@ -32,7 +26,6 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
-// ---------------- icon ----------------
 const mushroomIcon = L.divIcon({
   html: "🍄",
   className: "",
@@ -56,51 +49,12 @@ function getDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ---------------- copy ----------------
-function copyText(text) {
-  navigator.clipboard.writeText(text);
-  alert("已複製座標");
-}
-
-// ---------------- MAP EVENTS ----------------
-function MapEvents({ setFollow }) {
-  useMapEvents({
-    dragstart() {
-      setFollow(false);
-    }
-  });
-  return null;
-}
-
-// ---------------- ADD MUSHROOM ----------------
-function AddMushroom({ enabled }) {
-  useMapEvents({
-    async contextmenu(e) {
-      if (!enabled) return;
-
-      const name = window.prompt("菇點名稱", "新菇點");
-      if (!name) return;
-
-      await addDoc(collection(db, "mushrooms"), {
-        name,
-        lat: e.latlng.lat,
-        lng: e.latlng.lng,
-        power: 50,
-        createdAt: serverTimestamp()
-      });
-    }
-  });
-
-  return null;
-}
-
 // ---------------- MAIN ----------------
 export default function App() {
   const [position, setPosition] = useState([25.033964, 121.564468]);
-  const [follow, setFollow] = useState(true);
+  const [mushrooms, setMushrooms] = useState([]);
   const [addMode, setAddMode] = useState(false);
   const [radar, setRadar] = useState(false);
-  const [mushrooms, setMushrooms] = useState([]);
 
   const mapRef = useRef(null);
 
@@ -123,7 +77,7 @@ export default function App() {
     });
   };
 
-  // GPS
+  // ---------------- GPS ----------------
   useEffect(() => {
     const id = navigator.geolocation.watchPosition((pos) => {
       setPosition([
@@ -135,19 +89,46 @@ export default function App() {
     return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  // firestore
+  // ---------------- Firestore ----------------
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "mushrooms"), (snap) => {
       setMushrooms(
-        snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data()
-        }))
+        snap.docs.map((d) => ({ id: d.id, ...d.data() }))
       );
     });
 
     return () => unsub();
   }, []);
+
+  // ---------------- MAP CONTROL CORE ----------------
+  const moveMap = (latlng, zoom = 18) => {
+    if (!mapRef.current) return;
+    mapRef.current.flyTo(latlng, zoom, {
+      duration: 0.8
+    });
+  };
+
+  // ---------------- ADD MUSHROOM ----------------
+  function AddMushroom() {
+    useMapEvents({
+      async contextmenu(e) {
+        if (!addMode) return;
+
+        const name = window.prompt("菇點名稱", "新菇點");
+        if (!name) return;
+
+        await addDoc(collection(db, "mushrooms"), {
+          name,
+          lat: e.latlng.lat,
+          lng: e.latlng.lng,
+          power: 50,
+          createdAt: serverTimestamp()
+        });
+      }
+    });
+
+    return null;
+  }
 
   const sorted = useMemo(() => {
     return [...mushrooms].sort((a, b) => {
@@ -157,7 +138,7 @@ export default function App() {
     });
   }, [mushrooms, position]);
 
-  // radar animation
+  // radar
   const [radarRadius, setRadarRadius] = useState(10);
 
   useEffect(() => {
@@ -177,19 +158,8 @@ export default function App() {
       <div style={{ position: "absolute", zIndex: 9999, top: 10, right: 10, background: "white", padding: 10 }}>
         <div>🍄 {mushrooms.length}</div>
 
-        <button onClick={() => {
-          setFollow(true);
-          if (mapRef.current) {
-            mapRef.current.flyTo(position, 18, { duration: 0.8 });
-          }
-        }}>
+        <button onClick={() => moveMap(position, 18)}>
           🎯 回到我
-        </button>
-
-        <br />
-
-        <button onClick={() => setFollow(v => !v)}>
-          跟隨 {follow ? "ON" : "OFF"}
         </button>
 
         <br />
@@ -205,20 +175,14 @@ export default function App() {
         </button>
       </div>
 
-      {/* 列表 */}
+      {/* list */}
       <div style={{ position: "absolute", top: 140, right: 10, zIndex: 9999, background: "white", padding: 10, width: 180 }}>
         <b>附近菇點</b>
 
         {sorted.map((m) => (
           <div
             key={m.id}
-            onClick={() => {
-              if (mapRef.current) {
-                mapRef.current.flyTo([m.lat, m.lng], 19, {
-                  duration: 0.8
-                });
-              }
-            }}
+            onClick={() => moveMap([m.lat, m.lng], 19)}
             style={{ cursor: "pointer", marginTop: 6 }}
           >
             {m.name} {isFav(m.id) && "⭐"}
@@ -235,15 +199,14 @@ export default function App() {
 
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-        <MapEvents setFollow={setFollow} />
-        <AddMushroom enabled={addMode} />
+        <AddMushroom />
 
         {/* 玩家 */}
         <Marker position={position}>
-          <Popup>你</Popup>
+          <Popup>你在這裡</Popup>
         </Marker>
 
-        {/* 雷達圈 */}
+        {/* 雷達 */}
         {radar && (
           <Circle
             center={position}
@@ -268,7 +231,7 @@ export default function App() {
 
                   <hr />
 
-                  <button onClick={() => copyText(`${m.lat},${m.lng}`)}>
+                  <button onClick={() => navigator.clipboard.writeText(`${m.lat},${m.lng}`)}>
                     📋 複製座標
                   </button>
 
@@ -276,6 +239,12 @@ export default function App() {
 
                   <button onClick={() => toggleFav(m.id)}>
                     {isFav(m.id) ? "⭐ 已收藏" : "☆ 收藏"}
+                  </button>
+
+                  <br />
+
+                  <button onClick={() => moveMap([m.lat, m.lng], 19)}>
+                    🎯 前往
                   </button>
                 </Popup>
               </Marker>
@@ -286,4 +255,4 @@ export default function App() {
       </MapContainer>
     </div>
   );
-}
+                    }
