@@ -9,7 +9,7 @@ import {
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-// fix leaflet icon
+// Fix Leaflet icon
 delete L.Icon.Default.prototype._getIconUrl;
 
 L.Icon.Default.mergeOptions({
@@ -21,16 +21,49 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-function FlyToLocation({ position }) {
+// 🔥 地圖跟隨使用者（無動畫版本）
+function FollowUser({ position }) {
   const map = useMap();
 
   useEffect(() => {
     if (position) {
-      map.flyTo(position, map.getZoom());
+      map.setView(position, map.getZoom(), {
+        animate: false
+      });
     }
   }, [position, map]);
 
   return null;
+}
+
+// 🎯 回到我（瞬間定位）
+function RecenterButton({ position }) {
+  const map = useMap();
+
+  return (
+    <button
+      onClick={() => {
+        map.setView(position, map.getZoom(), {
+          animate: false
+        });
+      }}
+      style={{
+        position: "fixed",
+        bottom: 20,
+        right: 20,
+        zIndex: 9999,
+        padding: "10px 12px",
+        borderRadius: "10px",
+        border: "none",
+        background: "white",
+        boxShadow: "0 0 8px rgba(0,0,0,0.25)",
+        cursor: "pointer",
+        fontSize: "14px"
+      }}
+    >
+      🎯 回到我
+    </button>
+  );
 }
 
 export default function App() {
@@ -43,7 +76,7 @@ export default function App() {
   const [speed, setSpeed] = useState(null);
   const [heading, setHeading] = useState(0);
 
-  // GPS
+  // 📍 GPS tracking
   useEffect(() => {
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -66,7 +99,7 @@ export default function App() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
-  // Compass（安全版）
+  // 🧭 Compass（安全版）
   useEffect(() => {
     const handler = (e) => {
       if (typeof e.alpha === "number") {
@@ -74,35 +107,53 @@ export default function App() {
       }
     };
 
-    const start = async () => {
+    const startCompass = async () => {
       try {
         if (
           typeof DeviceOrientationEvent !== "undefined" &&
           typeof DeviceOrientationEvent.requestPermission === "function"
         ) {
-          const res = await DeviceOrientationEvent.requestPermission();
+          const res =
+            await DeviceOrientationEvent.requestPermission();
           if (res === "granted") {
-            window.addEventListener("deviceorientation", handler, true);
+            window.addEventListener(
+              "deviceorientation",
+              handler,
+              true
+            );
           }
         } else {
-          window.addEventListener("deviceorientation", handler, true);
+          window.addEventListener(
+            "deviceorientation",
+            handler,
+            true
+          );
         }
       } catch (e) {
-        console.log("Compass not available");
+        console.log("Compass not supported");
       }
     };
 
-    start();
+    startCompass();
 
     return () => {
-      window.removeEventListener("deviceorientation", handler, true);
+      window.removeEventListener(
+        "deviceorientation",
+        handler,
+        true
+      );
     };
   }, []);
 
   return (
-    <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
-
-      {/* 🧭 右上角 HUD */}
+    <div
+      style={{
+        width: "100vw",
+        height: "100vh",
+        position: "relative"
+      }}
+    >
+      {/* 📊 右上角 HUD */}
       <div
         style={{
           position: "fixed",
@@ -117,19 +168,27 @@ export default function App() {
           minWidth: "170px"
         }}
       >
-        <div><b>Lat:</b> {position[0]?.toFixed(6)}</div>
-        <div><b>Lng:</b> {position[1]?.toFixed(6)}</div>
+        <div>
+          <b>Lat:</b> {position[0].toFixed(6)}
+        </div>
+        <div>
+          <b>Lng:</b> {position[1].toFixed(6)}
+        </div>
         <div>
           <b>GPS:</b>{" "}
-          {accuracy != null ? `${Math.round(accuracy)} m` : "loading..."}
+          {accuracy != null
+            ? `${Math.round(accuracy)} m`
+            : "loading..."}
         </div>
         <div>
           <b>Speed:</b>{" "}
-          {speed != null ? `${(speed * 3.6).toFixed(1)} km/h` : "0 km/h"}
+          {speed != null
+            ? `${(speed * 3.6).toFixed(1)} km/h`
+            : "0 km/h"}
         </div>
       </div>
 
-      {/* 🗺 地圖 */}
+      {/* 🗺 Map */}
       <MapContainer
         center={position}
         zoom={18}
@@ -140,37 +199,16 @@ export default function App() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        <FlyToLocation position={position} />
+        <FollowUser position={position} />
 
         <Marker position={position}>
           <Popup>你在這裡</Popup>
         </Marker>
+
+        <RecenterButton position={position} />
       </MapContainer>
 
-      {/* 🎯 回到我 */}
-      <button
-        onClick={() => {
-          window.dispatchEvent(
-            new CustomEvent("recenter-map")
-          );
-        }}
-        style={{
-          position: "fixed",
-          bottom: 20,
-          right: 20,
-          zIndex: 9999,
-          padding: "10px 12px",
-          borderRadius: "10px",
-          border: "none",
-          background: "white",
-          boxShadow: "0 0 8px rgba(0,0,0,0.25)",
-          cursor: "pointer"
-        }}
-      >
-        🎯 回到我
-      </button>
-
-      {/* 🧭 羅盤 */}
+      {/* 🧭 Compass */}
       <div
         style={{
           position: "fixed",
