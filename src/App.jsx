@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -22,43 +22,46 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
-// ---------------- helper: map fly ----------------
-function FlyToMe({ position }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (position) {
-      map.setView(position, 18);
-    }
-  }, [position]);
-
-  return null;
-}
-
+// ---------------- main app ----------------
 export default function App() {
   const [position, setPosition] = useState([
     25.033964,
     121.564468
   ]);
 
-  const [mapRef, setMapRef] = useState(null);
   const [accuracy, setAccuracy] = useState(null);
+
+  const mapRef = useRef(null);
+
+  // 🧠 關鍵：是否跟隨玩家
+  const followRef = useRef(true);
 
   // 📍 GPS
   useEffect(() => {
-    navigator.geolocation.watchPosition((pos) => {
-      setPosition([
+    if (!navigator.geolocation) return;
+
+    const id = navigator.geolocation.watchPosition((pos) => {
+      const newPos = [
         pos.coords.latitude,
         pos.coords.longitude
-      ]);
+      ];
+
+      setPosition(newPos);
       setAccuracy(pos.coords.accuracy);
+
+      // 🟢 只有「跟隨模式」才會移動地圖
+      if (followRef.current && mapRef.current) {
+        mapRef.current.setView(newPos, mapRef.current.getZoom());
+      }
     });
+
+    return () => navigator.geolocation.clearWatch(id);
   }, []);
 
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
 
-      {/* 🧭 HUD（一定看得到） */}
+      {/* 🧭 HUD */}
       <div
         style={{
           position: "absolute",
@@ -71,19 +74,21 @@ export default function App() {
           fontSize: 12
         }}
       >
-        📍 {position[0].toFixed(6)} , {position[1].toFixed(6)}
+        📍 {position[0].toFixed(6)}, {position[1].toFixed(6)}
         <br />
         🎯 精度: {accuracy ? Math.round(accuracy) + "m" : "-"}
       </div>
 
-      {/* 🎯 回到我（關鍵：放在 MapContainer 外面） */}
+      {/* 🎯 回到我 */}
       <button
         onClick={() => {
-          if (mapRef) {
-            mapRef.setView(position, 18, {
+          if (mapRef.current) {
+            mapRef.current.setView(position, 18, {
               animate: true
             });
           }
+
+          followRef.current = true; // 回到我 = 開啟跟隨
         }}
         style={{
           position: "absolute",
@@ -94,54 +99,48 @@ export default function App() {
           borderRadius: 12,
           border: "none",
           background: "#111",
-          color: "white",
-          fontSize: 14
+          color: "white"
         }}
       >
         🎯 回到我
       </button>
 
-      {/* 🔍 zoom */}
-      <div
+      {/* 🔘 跟隨切換 */}
+      <button
+        onClick={() => {
+          followRef.current = !followRef.current;
+        }}
         style={{
           position: "absolute",
-          top: 10,
-          right: 10,
+          bottom: 80,
+          right: 20,
           zIndex: 99999,
-          display: "flex",
-          flexDirection: "column",
-          gap: 8
+          padding: "10px 14px",
+          borderRadius: 12,
+          border: "none",
+          background: followRef.current ? "green" : "gray",
+          color: "white"
         }}
       >
-        <button
-          onClick={() => mapRef?.zoomIn()}
-          style={{ width: 40, height: 40 }}
-        >
-          +
-        </button>
-
-        <button
-          onClick={() => mapRef?.zoomOut()}
-          style={{ width: 40, height: 40 }}
-        >
-          -
-        </button>
-      </div>
+        {followRef.current ? "跟隨 ON" : "跟隨 OFF"}
+      </button>
 
       {/* 🗺 Map */}
       <MapContainer
         center={position}
         zoom={18}
         style={{ width: "100%", height: "100%" }}
-        whenCreated={(map) => setMapRef(map)}
+        whenCreated={(map) => (mapRef.current = map)}
+        onDragStart={() => {
+          // 🟡 一拖動 → 自動關掉跟隨
+          followRef.current = false;
+        }}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
         <Marker position={position}>
           <Popup>你在這裡</Popup>
         </Marker>
-
-        <FlyToMe position={position} />
       </MapContainer>
     </div>
   );
