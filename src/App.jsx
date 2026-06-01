@@ -18,7 +18,6 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
-// ---------------- icon ----------------
 const mushroomIcon = L.divIcon({
   html: "🍄",
   className: "",
@@ -29,6 +28,7 @@ const mushroomIcon = L.divIcon({
 // ---------------- distance ----------------
 function getDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
+
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
 
@@ -43,17 +43,13 @@ function getDistance(lat1, lng1, lat2, lng2) {
 
 export default function App() {
 
-  // ===============================
-  // 1️⃣ PURE STATE LAYER（只存資料）
-  // ===============================
+  const mapRef = useRef(null);
+  const containerRef = useRef(null);
+
   const [gps, setGps] = useState([25.033964, 121.564468]);
   const [mushrooms, setMushrooms] = useState([]);
 
-  const mapEngine = useRef(null);
-
-  // ===============================
-  // 2️⃣ GPS（只更新資料，不控制地圖）
-  // ===============================
+  // ---------------- GPS (only data) ----------------
   useEffect(() => {
     const id = navigator.geolocation.watchPosition((pos) => {
       setGps([pos.coords.latitude, pos.coords.longitude]);
@@ -62,9 +58,7 @@ export default function App() {
     return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  // ===============================
-  // 3️⃣ FIRESTORE
-  // ===============================
+  // ---------------- firestore ----------------
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "mushrooms"), (snap) => {
       setMushrooms(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -73,14 +67,21 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // ===============================
-  // 4️⃣ MAP ENGINE（唯一控制地圖）
-  // ===============================
+  // ---------------- SAFE MAP ENGINE ----------------
   const moveTo = (latlng, zoom = 18) => {
-    if (!mapEngine.current) return;
+    const map = mapRef.current;
+    if (!map) return;
 
-    mapEngine.current.flyTo(latlng, zoom, {
+    // 1️⃣ fly animation
+    map.flyTo(latlng, zoom, {
       duration: 0.8
+    });
+
+    // 2️⃣ FIX TILE RENDER (核心)
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        map.invalidateSize(true);
+      }, 50);
     });
   };
 
@@ -88,9 +89,17 @@ export default function App() {
     moveTo(gps, 18);
   };
 
-  // ===============================
-  // 5️⃣ SORT（UI 用，不影響地圖）
-  // ===============================
+  // ---------------- map binder ----------------
+  function MapBinder() {
+    const map = useMap();
+
+    useEffect(() => {
+      mapRef.current = map;
+    }, [map]);
+
+    return null;
+  }
+
   const sorted = useMemo(() => {
     return [...mushrooms].sort((a, b) => {
       const da = getDistance(gps[0], gps[1], a.lat, a.lng);
@@ -99,42 +108,26 @@ export default function App() {
     });
   }, [mushrooms, gps]);
 
-  // ===============================
-  // 6️⃣ MAP CONTROLLER（只掛一次）
-  // ===============================
-  function MapBinder() {
-    const map = useMap();
-
-    useEffect(() => {
-      mapEngine.current = map;
-    }, [map]);
-
-    return null;
-  }
-
-  // ===============================
-  // 7️⃣ UI
-  // ===============================
   return (
-    <div style={{ width: "100vw", height: "100vh" }}>
+    <div
+      ref={containerRef}
+      style={{ width: "100vw", height: "100vh" }}
+    >
 
-      {/* 控制面板 */}
+      {/* UI */}
       <div style={{
         position: "absolute",
         zIndex: 9999,
         top: 10,
         right: 10,
         background: "white",
-        padding: 10,
-        borderRadius: 8
+        padding: 10
       }}>
-
         <div>🍄 {mushrooms.length}</div>
 
         <button onClick={returnToMe}>
           🎯 回到我
         </button>
-
       </div>
 
       {/* list */}
@@ -149,7 +142,6 @@ export default function App() {
         maxHeight: 300,
         overflowY: "auto"
       }}>
-
         <b>菇點</b>
 
         {sorted.map(m => (
@@ -170,16 +162,21 @@ export default function App() {
         style={{ width: "100%", height: "100%" }}
       >
 
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          updateWhenIdle={false}
+          updateWhenZooming={false}
+          keepBuffer={2}
+        />
 
         <MapBinder />
 
-        {/* 玩家 */}
+        {/* player */}
         <Marker position={gps}>
           <Popup>你在這裡</Popup>
         </Marker>
 
-        {/* 菇 */}
+        {/* mushrooms */}
         {mushrooms.map(m => (
           <Fragment key={m.id}>
             <Circle center={[m.lat, m.lng]} radius={40} />
