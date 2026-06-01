@@ -1,15 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   MapContainer,
   TileLayer,
   Marker,
   Popup,
+  Polygon,
   useMap
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
+// ------------------------------
 // Leaflet icon fix
+// ------------------------------
 delete L.Icon.Default.prototype._getIconUrl;
 
 L.Icon.Default.mergeOptions({
@@ -18,17 +21,31 @@ L.Icon.Default.mergeOptions({
   iconUrl:
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
-// 🧭 fallback S2（安全版）
+// ------------------------------
+// S2 (正式版)
+// ------------------------------
+let S2 = null;
+try {
+  S2 = require("s2-geometry");
+} catch (e) {
+  console.log("S2 fallback mode");
+}
+
+// ------------------------------
+// fallback cell（避免 crash）
+// ------------------------------
 function fakeCell(lat, lng, level) {
   const scale = level === 14 ? 10000 : 100000;
   return `${Math.floor(lat * scale)}_${Math.floor(lng * scale)}_L${level}`;
 }
 
-// 🎯 map follow controller（只在啟動時定位一次）
-function InitialCenter({ position }) {
+// ------------------------------
+// Map controller（不跳畫面核心）
+// ------------------------------
+function MapInit({ position }) {
   const map = useMap();
 
   useEffect(() => {
@@ -42,8 +59,10 @@ function InitialCenter({ position }) {
   return null;
 }
 
-// 🎮 可切換 follow mode（預設關閉）
-function FollowToggle({ position, follow }) {
+// ------------------------------
+// 跟隨模式（可開關）
+// ------------------------------
+function FollowMode({ position, follow }) {
   const map = useMap();
 
   useEffect(() => {
@@ -57,7 +76,9 @@ function FollowToggle({ position, follow }) {
   return null;
 }
 
-// 🎯 回到我（手動）
+// ------------------------------
+// 回到我
+// ------------------------------
 function Recenter({ position }) {
   const map = useMap();
 
@@ -95,17 +116,17 @@ export default function App() {
   const [accuracy, setAccuracy] = useState(null);
   const [speed, setSpeed] = useState(null);
 
-  // 👉 控制是否自動跟隨地圖
+  // 🎮 follow toggle
   const [follow, setFollow] = useState(false);
 
-  // 📍 POI（Pikmin Bloom）
+  // 🌼 POI（Pikmin Bloom 核心資料）
   const pois = [
-    { name: "🌼 花點", pos: [25.03397, 121.5645] },
-    { name: "🍄 菇點", pos: [25.035, 121.566] },
-    { name: "🌳 公園", pos: [25.0328, 121.5654] }
+    { id: 1, type: "flower", name: "🌼 花點 A", pos: [25.03397, 121.5645] },
+    { id: 2, type: "mushroom", name: "🍄 菇點 B", pos: [25.035, 121.566] },
+    { id: 3, type: "park", name: "🌳 公園 C", pos: [25.0328, 121.5654] }
   ];
 
-  // GPS tracking
+  // 📍 GPS
   useEffect(() => {
     const id = navigator.geolocation.watchPosition(
       (pos) => {
@@ -117,7 +138,7 @@ export default function App() {
         setAccuracy(pos.coords.accuracy);
         setSpeed(pos.coords.speed);
       },
-      (err) => console.log("GPS error:", err),
+      (err) => console.log(err),
       {
         enableHighAccuracy: true,
         maximumAge: 1000
@@ -130,9 +151,40 @@ export default function App() {
   const lat = position[0];
   const lng = position[1];
 
-  // 🟨 L14 / L17 fake S2
-  const cell14 = fakeCell(lat, lng, 14);
-  const cell17 = fakeCell(lat, lng, 17);
+  // ------------------------------
+  // 🧭 S2 cells
+  // ------------------------------
+  const cell14 =
+    S2?.latLngToKey
+      ? S2.latLngToKey(lat, lng, 14)
+      : fakeCell(lat, lng, 14);
+
+  const cell17 =
+    S2?.latLngToKey
+      ? S2.latLngToKey(lat, lng, 17)
+      : fakeCell(lat, lng, 17);
+
+  // ------------------------------
+  // 🌡 heatmap（簡單版：POI count）
+  // ------------------------------
+  const heatLevel = useMemo(() => {
+    const nearby = pois.filter((p) => {
+      const dx = p.pos[0] - lat;
+      const dy = p.pos[1] - lng;
+      return Math.sqrt(dx * dx + dy * dy) < 0.002;
+    });
+
+    return nearby.length;
+  }, [lat, lng]);
+
+  // ------------------------------
+  // 🎯 任務系統（簡單 game layer）
+  // ------------------------------
+  const tasks = [
+    "走 100 公尺",
+    "靠近一個花點",
+    "探索一個菇點"
+  ];
 
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
@@ -148,12 +200,12 @@ export default function App() {
           padding: 10,
           borderRadius: 10,
           fontSize: 13,
-          minWidth: 180
+          minWidth: 200
         }}
       >
         <div>Lat: {lat.toFixed(6)}</div>
         <div>Lng: {lng.toFixed(6)}</div>
-        <div>GPS: {accuracy ? `${Math.round(accuracy)} m` : "-"}</div>
+        <div>GPS: {accuracy ? `${Math.round(accuracy)}m` : "-"}</div>
         <div>Speed: {speed ? `${(speed * 3.6).toFixed(1)} km/h` : "0"}</div>
 
         <hr />
@@ -163,20 +215,31 @@ export default function App() {
 
         <hr />
 
-        {/* 🎮 follow toggle */}
+        <div>🌡 Heat: {heatLevel}</div>
+
+        <hr />
+
         <button
           onClick={() => setFollow(!follow)}
           style={{
             width: "100%",
-            padding: "6px",
+            padding: 6,
             borderRadius: 8,
             border: "none",
-            background: follow ? "#4ade80" : "#e5e7eb",
-            cursor: "pointer"
+            background: follow ? "#4ade80" : "#e5e7eb"
           }}
         >
-          {follow ? "📍 跟隨中" : "🧭 自由模式"}
+          {follow ? "📍 跟隨模式" : "🧭 自由模式"}
         </button>
+
+        <div style={{ marginTop: 8 }}>
+          🎯 任務：
+          <ul>
+            {tasks.map((t, i) => (
+              <li key={i}>{t}</li>
+            ))}
+          </ul>
+        </div>
       </div>
 
       <MapContainer
@@ -184,24 +247,19 @@ export default function App() {
         zoom={18}
         style={{ width: "100%", height: "100%" }}
       >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-        {/* 🧠 只初始化一次，不會跳 */}
-        <InitialCenter position={position} />
+        {/* 🧠 不跳畫面核心 */}
+        <MapInit position={position} />
+        <FollowMode position={position} follow={follow} />
 
-        {/* 🎮 可選跟隨 */}
-        <FollowToggle position={position} follow={follow} />
-
-        {/* 📍 POI */}
-        {pois.map((p, i) => (
-          <Marker key={i} position={p.pos}>
+        {/* 🌼 POI */}
+        {pois.map((p) => (
+          <Marker key={p.id} position={p.pos}>
             <Popup>{p.name}</Popup>
           </Marker>
         ))}
 
-        {/* 🎯 回到我 */}
         <Recenter position={position} />
       </MapContainer>
     </div>
