@@ -6,8 +6,8 @@ import {
   Popup,
   useMap
 } from "react-leaflet";
-import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import L from "leaflet";
 
 // Leaflet icon fix
 delete L.Icon.Default.prototype._getIconUrl;
@@ -21,33 +21,52 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-// 🧭 Fake S2（安全版，不會炸）
+// 🧭 fallback S2（安全版）
 function fakeCell(lat, lng, level) {
-  const scale = Math.pow(10, (level === 14 ? 4 : 5));
+  const scale = level === 14 ? 10000 : 100000;
   return `${Math.floor(lat * scale)}_${Math.floor(lng * scale)}_L${level}`;
 }
 
-// 📍 地圖跟隨使用者（無動畫，避免飄）
-function Follow({ position }) {
+// 🎯 map follow controller（只在啟動時定位一次）
+function InitialCenter({ position }) {
   const map = useMap();
 
   useEffect(() => {
     if (position) {
-      map.setView(position, map.getZoom(), { animate: false });
+      map.setView(position, map.getZoom(), {
+        animate: false
+      });
     }
-  }, [position, map]);
+  }, []);
 
   return null;
 }
 
-// 🎯 回到我
+// 🎮 可切換 follow mode（預設關閉）
+function FollowToggle({ position, follow }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (follow && position) {
+      map.setView(position, map.getZoom(), {
+        animate: false
+      });
+    }
+  }, [position, follow]);
+
+  return null;
+}
+
+// 🎯 回到我（手動）
 function Recenter({ position }) {
   const map = useMap();
 
   return (
     <button
       onClick={() =>
-        map.setView(position, map.getZoom(), { animate: false })
+        map.setView(position, map.getZoom(), {
+          animate: false
+        })
       }
       style={{
         position: "fixed",
@@ -75,9 +94,18 @@ export default function App() {
 
   const [accuracy, setAccuracy] = useState(null);
   const [speed, setSpeed] = useState(null);
-  const [heading, setHeading] = useState(0);
 
-  // 📍 GPS
+  // 👉 控制是否自動跟隨地圖
+  const [follow, setFollow] = useState(false);
+
+  // 📍 POI（Pikmin Bloom）
+  const pois = [
+    { name: "🌼 花點", pos: [25.03397, 121.5645] },
+    { name: "🍄 菇點", pos: [25.035, 121.566] },
+    { name: "🌳 公園", pos: [25.0328, 121.5654] }
+  ];
+
+  // GPS tracking
   useEffect(() => {
     const id = navigator.geolocation.watchPosition(
       (pos) => {
@@ -85,8 +113,9 @@ export default function App() {
           pos.coords.latitude,
           pos.coords.longitude
         ]);
-        setAccuracy(pos.coords.accuracy ?? null);
-        setSpeed(pos.coords.speed ?? null);
+
+        setAccuracy(pos.coords.accuracy);
+        setSpeed(pos.coords.speed);
       },
       (err) => console.log("GPS error:", err),
       {
@@ -98,34 +127,12 @@ export default function App() {
     return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  // 🧭 羅盤（安全）
-  useEffect(() => {
-    const handler = (e) => {
-      if (typeof e.alpha === "number") {
-        setHeading(e.alpha);
-      }
-    };
-
-    window.addEventListener("deviceorientation", handler, true);
-
-    return () => {
-      window.removeEventListener("deviceorientation", handler, true);
-    };
-  }, []);
-
   const lat = position[0];
   const lng = position[1];
 
-  // 🟨 L14 / L17 cell
+  // 🟨 L14 / L17 fake S2
   const cell14 = fakeCell(lat, lng, 14);
   const cell17 = fakeCell(lat, lng, 17);
-
-  // 📍 POI（示範）
-  const pois = [
-    { name: "台北101", pos: [25.03397, 121.5645] },
-    { name: "信義商圈", pos: [25.035, 121.566] },
-    { name: "捷運站", pos: [25.0328, 121.5654] }
-  ];
 
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
@@ -146,17 +153,30 @@ export default function App() {
       >
         <div>Lat: {lat.toFixed(6)}</div>
         <div>Lng: {lng.toFixed(6)}</div>
-        <div>
-          GPS: {accuracy ? `${Math.round(accuracy)} m` : "-"}
-        </div>
-        <div>
-          Speed: {speed ? `${(speed * 3.6).toFixed(1)} km/h` : "0"}
-        </div>
+        <div>GPS: {accuracy ? `${Math.round(accuracy)} m` : "-"}</div>
+        <div>Speed: {speed ? `${(speed * 3.6).toFixed(1)} km/h` : "0"}</div>
 
         <hr />
 
         <div>🟨 L14: {cell14}</div>
         <div>🟨 L17: {cell17}</div>
+
+        <hr />
+
+        {/* 🎮 follow toggle */}
+        <button
+          onClick={() => setFollow(!follow)}
+          style={{
+            width: "100%",
+            padding: "6px",
+            borderRadius: 8,
+            border: "none",
+            background: follow ? "#4ade80" : "#e5e7eb",
+            cursor: "pointer"
+          }}
+        >
+          {follow ? "📍 跟隨中" : "🧭 自由模式"}
+        </button>
       </div>
 
       <MapContainer
@@ -168,7 +188,11 @@ export default function App() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        <Follow position={position} />
+        {/* 🧠 只初始化一次，不會跳 */}
+        <InitialCenter position={position} />
+
+        {/* 🎮 可選跟隨 */}
+        <FollowToggle position={position} follow={follow} />
 
         {/* 📍 POI */}
         {pois.map((p, i) => (
@@ -177,30 +201,9 @@ export default function App() {
           </Marker>
         ))}
 
+        {/* 🎯 回到我 */}
         <Recenter position={position} />
       </MapContainer>
-
-      {/* 🧭 羅盤 */}
-      <div
-        style={{
-          position: "fixed",
-          bottom: 20,
-          right: 140,
-          zIndex: 9999,
-          width: 60,
-          height: 60,
-          borderRadius: "50%",
-          background: "white",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 22,
-          transform: `rotate(${heading}deg)`,
-          boxShadow: "0 0 8px rgba(0,0,0,0.25)"
-        }}
-      >
-        🧭
-      </div>
     </div>
   );
 }
