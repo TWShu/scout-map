@@ -1,22 +1,11 @@
-import { useEffect, useState } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  useMap
-} from "react-leaflet";
-
+import { useEffect, useState, useRef } from "react";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
 // 🔥 Firebase
 import { initializeApp } from "firebase/app";
-import {
-  getFirestore,
-  collection,
-  onSnapshot
-} from "firebase/firestore";
+import { getFirestore, collection, onSnapshot } from "firebase/firestore";
 
 // ---------------- Leaflet icon fix ----------------
 delete L.Icon.Default.prototype._getIconUrl;
@@ -30,7 +19,7 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
-// ---------------- Firebase init ----------------
+// ---------------- Firebase config（你要換成自己的） ----------------
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
   authDomain: "YOUR_AUTH_DOMAIN",
@@ -40,13 +29,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// ---------------- map controller ----------------
+// ---------------- Map controller（只在 follow=true 時移動） ----------------
 function MapController({ position, follow }) {
   const map = useMap();
 
   useEffect(() => {
-    if (follow) {
-      map.setView(position);
+    if (follow && position) {
+      map.setView(position, map.getZoom());
     }
   }, [position, follow, map]);
 
@@ -54,35 +43,45 @@ function MapController({ position, follow }) {
 }
 
 export default function App() {
-  const [position, setPosition] = useState([
-    25.033964,
-    121.564468
-  ]);
-
+  const [position, setPosition] = useState([25.033964, 121.564468]);
   const [follow, setFollow] = useState(true);
   const [mushrooms, setMushrooms] = useState([]);
 
-  // 📍 GPS
+  // 🧠 debug 用（一定要看這個）
+  const [debugCount, setDebugCount] = useState(0);
+
+  // 📍 GPS（只更新資料，不控制地圖）
   useEffect(() => {
-    navigator.geolocation.watchPosition((pos) => {
+    if (!navigator.geolocation) return;
+
+    const id = navigator.geolocation.watchPosition((pos) => {
       setPosition([
         pos.coords.latitude,
         pos.coords.longitude
       ]);
     });
+
+    return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  // 🍄 Firebase 即時讀取
+  // 🍄 Firebase 即時監聽（關鍵）
   useEffect(() => {
     const ref = collection(db, "mushrooms");
 
     const unsub = onSnapshot(ref, (snap) => {
-      const data = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data()
-      }));
+      console.log("🔥 Firestore size:", snap.size);
+
+      const data = snap.docs.map((doc) => {
+        const d = doc.data();
+        console.log("🍄 doc:", d);
+        return {
+          id: doc.id,
+          ...d
+        };
+      });
 
       setMushrooms(data);
+      setDebugCount(snap.size);
     });
 
     return () => unsub();
@@ -90,6 +89,24 @@ export default function App() {
 
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
+
+      {/* 🧭 HUD */}
+      <div
+        style={{
+          position: "absolute",
+          top: 10,
+          left: 10,
+          zIndex: 99999,
+          background: "white",
+          padding: 10,
+          borderRadius: 10,
+          fontSize: 12
+        }}
+      >
+        📍 {position[0].toFixed(6)}, {position[1].toFixed(6)}
+        <br />
+        🍄 mushrooms: {debugCount}
+      </div>
 
       {/* 🎯 回到我 */}
       <button
@@ -100,15 +117,16 @@ export default function App() {
           right: 20,
           zIndex: 99999,
           padding: 12,
+          borderRadius: 12,
+          border: "none",
           background: "#111",
-          color: "white",
-          borderRadius: 12
+          color: "white"
         }}
       >
         🎯 回到我
       </button>
 
-      {/* 🔘 跟隨 */}
+      {/* 🔘 跟隨開關 */}
       <button
         onClick={() => setFollow(v => !v)}
         style={{
@@ -117,15 +135,16 @@ export default function App() {
           right: 20,
           zIndex: 99999,
           padding: 10,
+          borderRadius: 12,
+          border: "none",
           background: follow ? "green" : "gray",
-          color: "white",
-          borderRadius: 12
+          color: "white"
         }}
       >
         {follow ? "跟隨 ON" : "跟隨 OFF"}
       </button>
 
-      {/* 🗺 Map */}
+      {/* 🗺 地圖 */}
       <MapContainer
         center={position}
         zoom={18}
@@ -133,19 +152,21 @@ export default function App() {
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-        {/* 📍 玩家 */}
+        {/* 📍 玩家位置 */}
         <Marker position={position}>
           <Popup>你在這裡</Popup>
         </Marker>
 
-        {/* 🍄 Firebase POI */}
+        {/* 🍄 Firebase 菇點 */}
         {mushrooms.map((m) => (
           <Marker
             key={m.id}
-            position={[m.lat, m.lng]}
+            position={[Number(m.lat), Number(m.lng)]}
           >
             <Popup>
-              🍄 {m.name || "菇點"}
+              🍄 {m.name || "未命名菇點"}
+              <br />
+              {m.lat}, {m.lng}
             </Popup>
           </Marker>
         ))}
