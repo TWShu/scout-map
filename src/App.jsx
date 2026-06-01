@@ -14,7 +14,7 @@ import L from "leaflet";
 import { db } from "./firebase";
 import { collection, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
 
-// ---------------- Leaflet fix ----------------
+// ---------------- icon ----------------
 delete L.Icon.Default.prototype._getIconUrl;
 
 L.Icon.Default.mergeOptions({
@@ -26,7 +26,6 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
-// ---------------- icon ----------------
 const mushroomIcon = L.divIcon({
   html: "🍄",
   className: "",
@@ -37,7 +36,6 @@ const mushroomIcon = L.divIcon({
 // ---------------- distance ----------------
 function getDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
-
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
 
@@ -50,7 +48,6 @@ function getDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ---------------- MAIN ----------------
 export default function App() {
   const mapRef = useRef(null);
 
@@ -58,25 +55,7 @@ export default function App() {
   const [mushrooms, setMushrooms] = useState([]);
   const [addMode, setAddMode] = useState(false);
 
-  const [favorites, setFavorites] = useState(() => {
-    const saved = localStorage.getItem("fav");
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const isFav = (id) => favorites.includes(id);
-
-  const toggleFav = (id) => {
-    setFavorites((p) => {
-      const next = p.includes(id)
-        ? p.filter((x) => x !== id)
-        : [...p, id];
-
-      localStorage.setItem("fav", JSON.stringify(next));
-      return next;
-    });
-  };
-
-  // ---------------- GPS (只更新 state，不控制地圖) ----------------
+  // ⭐ GPS ONLY updates marker
   useEffect(() => {
     const id = navigator.geolocation.watchPosition((pos) => {
       setPosition([pos.coords.latitude, pos.coords.longitude]);
@@ -85,7 +64,7 @@ export default function App() {
     return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  // ---------------- Firestore ----------------
+  // firestore
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "mushrooms"), (snap) => {
       setMushrooms(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -94,16 +73,12 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // ---------------- SINGLE MAP CONTROL ----------------
+  // map control ONLY here
   const moveMap = (latlng, zoom = 18) => {
     if (!mapRef.current) return;
-
-    mapRef.current.flyTo(latlng, zoom, {
-      duration: 0.8
-    });
+    mapRef.current.flyTo(latlng, zoom, { duration: 0.8 });
   };
 
-  // ---------------- ADD ----------------
   function AddMushroom() {
     useMapEvents({
       async contextmenu(e) {
@@ -161,25 +136,24 @@ export default function App() {
             onClick={() => moveMap([m.lat, m.lng], 19)}
             style={{ cursor: "pointer", marginTop: 6 }}
           >
-            {m.name} {isFav(m.id) && "⭐"}
+            {m.name}
           </div>
         ))}
       </div>
 
+      {/* IMPORTANT: FIXED CENTER */}
       <MapContainer
-        center={position}
+        center={[25.033964, 121.564468]}
         zoom={18}
         style={{ height: "100%", width: "100%" }}
-        whenCreated={(map) => {
-          mapRef.current = map;
-        }}
+        whenCreated={(map) => (mapRef.current = map)}
       >
 
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
         <AddMushroom />
 
-        {/* player */}
+        {/* player marker moves ONLY */}
         <Marker position={position}>
           <Popup>你在這裡</Popup>
         </Marker>
@@ -206,12 +180,6 @@ export default function App() {
                     }
                   >
                     📋 複製座標
-                  </button>
-
-                  <br />
-
-                  <button onClick={() => toggleFav(m.id)}>
-                    {isFav(m.id) ? "⭐ 已收藏" : "☆ 收藏"}
                   </button>
 
                   <br />
