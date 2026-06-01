@@ -4,7 +4,6 @@ import {
   TileLayer,
   Marker,
   Popup,
-  Polygon,
   useMap
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -25,7 +24,7 @@ L.Icon.Default.mergeOptions({
 });
 
 // ------------------------------
-// S2 (正式版)
+// S2 fallback（避免 crash）
 // ------------------------------
 let S2 = null;
 try {
@@ -34,26 +33,21 @@ try {
   console.log("S2 fallback mode");
 }
 
-// ------------------------------
-// fallback cell（避免 crash）
-// ------------------------------
 function fakeCell(lat, lng, level) {
   const scale = level === 14 ? 10000 : 100000;
   return `${Math.floor(lat * scale)}_${Math.floor(lng * scale)}_L${level}`;
 }
 
 // ------------------------------
-// Map controller（不跳畫面核心）
+// 地圖初始化（避免跳動）
 // ------------------------------
 function MapInit({ position }) {
   const map = useMap();
 
   useEffect(() => {
-    if (position) {
-      map.setView(position, map.getZoom(), {
-        animate: false
-      });
-    }
+    map.setView(position, map.getZoom(), {
+      animate: false
+    });
   }, []);
 
   return null;
@@ -66,7 +60,7 @@ function FollowMode({ position, follow }) {
   const map = useMap();
 
   useEffect(() => {
-    if (follow && position) {
+    if (follow) {
       map.setView(position, map.getZoom(), {
         animate: false
       });
@@ -119,14 +113,17 @@ export default function App() {
   // 🎮 follow toggle
   const [follow, setFollow] = useState(false);
 
-  // 🌼 POI（Pikmin Bloom 核心資料）
+  // 📊 HUD 折疊
+  const [hudOpen, setHudOpen] = useState(true);
+
+  // 🌼 POI
   const pois = [
-    { id: 1, type: "flower", name: "🌼 花點 A", pos: [25.03397, 121.5645] },
-    { id: 2, type: "mushroom", name: "🍄 菇點 B", pos: [25.035, 121.566] },
-    { id: 3, type: "park", name: "🌳 公園 C", pos: [25.0328, 121.5654] }
+    { name: "🌼 花點", pos: [25.03397, 121.5645] },
+    { name: "🍄 菇點", pos: [25.035, 121.566] },
+    { name: "🌳 公園", pos: [25.0328, 121.5654] }
   ];
 
-  // 📍 GPS
+  // GPS
   useEffect(() => {
     const id = navigator.geolocation.watchPosition(
       (pos) => {
@@ -151,9 +148,7 @@ export default function App() {
   const lat = position[0];
   const lng = position[1];
 
-  // ------------------------------
-  // 🧭 S2 cells
-  // ------------------------------
+  // 🟨 S2
   const cell14 =
     S2?.latLngToKey
       ? S2.latLngToKey(lat, lng, 14)
@@ -164,32 +159,10 @@ export default function App() {
       ? S2.latLngToKey(lat, lng, 17)
       : fakeCell(lat, lng, 17);
 
-  // ------------------------------
-  // 🌡 heatmap（簡單版：POI count）
-  // ------------------------------
-  const heatLevel = useMemo(() => {
-    const nearby = pois.filter((p) => {
-      const dx = p.pos[0] - lat;
-      const dy = p.pos[1] - lng;
-      return Math.sqrt(dx * dx + dy * dy) < 0.002;
-    });
-
-    return nearby.length;
-  }, [lat, lng]);
-
-  // ------------------------------
-  // 🎯 任務系統（簡單 game layer）
-  // ------------------------------
-  const tasks = [
-    "走 100 公尺",
-    "靠近一個花點",
-    "探索一個菇點"
-  ];
-
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
 
-      {/* 📊 HUD */}
+      {/* 📊 HUD（可縮放） */}
       <div
         style={{
           position: "fixed",
@@ -197,65 +170,80 @@ export default function App() {
           right: 10,
           zIndex: 9999,
           background: "white",
-          padding: 10,
           borderRadius: 10,
-          fontSize: 13,
-          minWidth: 200
+          boxShadow: "0 0 10px rgba(0,0,0,0.2)",
+          width: hudOpen ? 200 : 40,
+          transition: "0.2s",
+          overflow: "hidden",
+          fontSize: 13
         }}
       >
-        <div>Lat: {lat.toFixed(6)}</div>
-        <div>Lng: {lng.toFixed(6)}</div>
-        <div>GPS: {accuracy ? `${Math.round(accuracy)}m` : "-"}</div>
-        <div>Speed: {speed ? `${(speed * 3.6).toFixed(1)} km/h` : "0"}</div>
-
-        <hr />
-
-        <div>🟨 L14: {cell14}</div>
-        <div>🟨 L17: {cell17}</div>
-
-        <hr />
-
-        <div>🌡 Heat: {heatLevel}</div>
-
-        <hr />
-
-        <button
-          onClick={() => setFollow(!follow)}
+        {/* header */}
+        <div
+          onClick={() => setHudOpen(!hudOpen)}
           style={{
-            width: "100%",
-            padding: 6,
-            borderRadius: 8,
-            border: "none",
-            background: follow ? "#4ade80" : "#e5e7eb"
+            padding: 8,
+            cursor: "pointer",
+            fontWeight: "bold",
+            textAlign: "center",
+            borderBottom: hudOpen ? "1px solid #eee" : "none"
           }}
         >
-          {follow ? "📍 跟隨模式" : "🧭 自由模式"}
-        </button>
-
-        <div style={{ marginTop: 8 }}>
-          🎯 任務：
-          <ul>
-            {tasks.map((t, i) => (
-              <li key={i}>{t}</li>
-            ))}
-          </ul>
+          📍
         </div>
+
+        {/* content */}
+        {hudOpen && (
+          <div style={{ padding: 10 }}>
+            <div>Lat: {lat.toFixed(6)}</div>
+            <div>Lng: {lng.toFixed(6)}</div>
+            <div>
+              GPS: {accuracy ? `${Math.round(accuracy)}m` : "-"}
+            </div>
+            <div>
+              Speed: {speed ? `${(speed * 3.6).toFixed(1)} km/h` : "0"}
+            </div>
+
+            <hr />
+
+            <div>🟨 L14: {cell14}</div>
+            <div>🟨 L17: {cell17}</div>
+
+            <hr />
+
+            <button
+              onClick={() => setFollow(!follow)}
+              style={{
+                width: "100%",
+                padding: 6,
+                borderRadius: 8,
+                border: "none",
+                background: follow ? "#4ade80" : "#e5e7eb",
+                cursor: "pointer"
+              }}
+            >
+              {follow ? "📍 跟隨" : "🧭 自由"}
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* 🗺 地圖 */}
       <MapContainer
         center={position}
         zoom={18}
         style={{ width: "100%", height: "100%" }}
       >
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
 
-        {/* 🧠 不跳畫面核心 */}
         <MapInit position={position} />
         <FollowMode position={position} follow={follow} />
 
-        {/* 🌼 POI */}
-        {pois.map((p) => (
-          <Marker key={p.id} position={p.pos}>
+        {/* 📍 POI */}
+        {pois.map((p, i) => (
+          <Marker key={i} position={p.pos}>
             <Popup>{p.name}</Popup>
           </Marker>
         ))}
