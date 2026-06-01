@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -10,9 +10,7 @@ import {
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
-// ------------------------------
-// Leaflet icon fix
-// ------------------------------
+// ---------------- Leaflet icon fix ----------------
 delete L.Icon.Default.prototype._getIconUrl;
 
 L.Icon.Default.mergeOptions({
@@ -24,27 +22,20 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
-// ------------------------------
-// 🎯 回到我（不飛太誇張版本）
-// ------------------------------
-function FlyToMe({ position }) {
+// ---------------- Map Controller ----------------
+function MapController({ position }) {
   const map = useMap();
 
-  const firstLoad = useRef(true);
-
   useEffect(() => {
-    if (!position) return;
-
-    // 👉 只在第一次載入飛過去，避免一直跳
-    if (firstLoad.current) {
-      map.setView(position, 18);
-      firstLoad.current = false;
+    if (position) {
+      map.setView(position);
     }
   }, [position, map]);
 
   return null;
 }
 
+// ---------------- Main App ----------------
 export default function App() {
   const [position, setPosition] = useState([
     25.033964,
@@ -53,6 +44,8 @@ export default function App() {
 
   const [accuracy, setAccuracy] = useState(null);
   const [speed, setSpeed] = useState(null);
+
+  const map = useMapSafe();
 
   // 📍 GPS
   useEffect(() => {
@@ -69,21 +62,10 @@ export default function App() {
     return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  // 🎯 回到我（手動）
-  const mapRef = useRef(null);
-
-  function goToMe() {
-    if (mapRef.current) {
-      mapRef.current.setView(position, 18, {
-        animate: true
-      });
-    }
-  }
-
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
 
-      {/* 🧭 右上 HUD */}
+      {/* 🧭 HUD */}
       <div
         style={{
           position: "absolute",
@@ -93,8 +75,7 @@ export default function App() {
           background: "white",
           padding: 10,
           borderRadius: 10,
-          fontSize: 12,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+          fontSize: 12
         }}
       >
         <div>📍 Lat: {position[0].toFixed(6)}</div>
@@ -103,9 +84,13 @@ export default function App() {
         <div>🚀 速度: {speed ? `${speed.toFixed(1)} m/s` : "-"}</div>
       </div>
 
-      {/* 🎯 回到我 */}
+      {/* 🎯 回到我（關鍵修復） */}
       <button
-        onClick={goToMe}
+        onClick={() => {
+          map?.setView(position, 18, {
+            animate: true
+          });
+        }}
         style={{
           position: "absolute",
           bottom: 20,
@@ -115,8 +100,7 @@ export default function App() {
           borderRadius: 12,
           border: "none",
           background: "#111",
-          color: "white",
-          fontSize: 14
+          color: "white"
         }}
       >
         🎯 回到我
@@ -127,18 +111,24 @@ export default function App() {
         center={position}
         zoom={18}
         style={{ width: "100%", height: "100%" }}
-        whenCreated={(map) => (mapRef.current = map)}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-        {/* 📍 玩家位置 */}
         <Marker position={position}>
           <Popup>你在這裡</Popup>
         </Marker>
 
-        {/* 🧭 控制 fly only once */}
-        <FlyToMe position={position} />
+        <MapController position={position} />
       </MapContainer>
     </div>
   );
+}
+
+// ---------------- safe hook ----------------
+function useMapSafe() {
+  try {
+    return useMap();
+  } catch {
+    return null;
+  }
 }
