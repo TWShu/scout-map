@@ -42,8 +42,6 @@ function getDistance(lat1, lng1, lat2, lng2) {
 export default function App() {
 
   const mapRef = useRef(null);
-  const readyRef = useRef(false);
-  const queueRef = useRef([]);
 
   const [gps, setGps] = useState({
     lat: 25.033964,
@@ -52,7 +50,7 @@ export default function App() {
 
   const [mushrooms, setMushrooms] = useState([]);
 
-  // ---------------- GPS (only data) ----------------
+  // ---------------- GPS ----------------
   useEffect(() => {
     const id = navigator.geolocation.watchPosition((pos) => {
       setGps({
@@ -73,29 +71,21 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // ---------------- SAFE ENGINE ----------------
+  // ---------------- SAFE MOVE ENGINE ----------------
   const moveTo = (lat, lng, zoom = 18) => {
-    const map = mapRef.current;
-
-    if (!map || !readyRef.current) {
-      queueRef.current.push({ lat, lng, zoom });
-      return;
-    }
-
-    map.flyTo([lat, lng], zoom, {
-      duration: 0.8
-    });
-  };
-
-  const flushQueue = () => {
     const map = mapRef.current;
     if (!map) return;
 
-    queueRef.current.forEach((q) => {
-      map.flyTo([q.lat, q.lng], q.zoom, { duration: 0.8 });
+    // 🔥 核心修復：不用 flyTo（會灰）
+    map.stop(); // stop animation
+    map.setView([lat, lng], zoom, {
+      animate: false
     });
 
-    queueRef.current = [];
+    // 強制 repaint
+    requestAnimationFrame(() => {
+      map.invalidateSize(true);
+    });
   };
 
   const returnToMe = () => {
@@ -110,18 +100,14 @@ export default function App() {
     });
   }, [mushrooms, gps]);
 
-  // ---------------- MAP BINDER ----------------
   function MapBinder() {
     const map = useMap();
 
     useEffect(() => {
       mapRef.current = map;
-      readyRef.current = true;
 
-      // 🔥 確保 tile ready
       setTimeout(() => {
         map.invalidateSize(true);
-        flushQueue();
       }, 200);
     }, [map]);
 
@@ -178,6 +164,7 @@ export default function App() {
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           keepBuffer={6}
+          updateWhenZooming={false}
         />
 
         <MapBinder />
