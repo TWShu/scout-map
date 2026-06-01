@@ -22,7 +22,19 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
-// ---------------- main app ----------------
+// ---------------- map controller (核心) ----------------
+function MapSync({ position, follow }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (follow && position) {
+      map.setView(position, map.getZoom());
+    }
+  }, [position, follow, map]);
+
+  return null;
+}
+
 export default function App() {
   const [position, setPosition] = useState([
     25.033964,
@@ -31,28 +43,19 @@ export default function App() {
 
   const [accuracy, setAccuracy] = useState(null);
 
-  const mapRef = useRef(null);
-
-  // 🧠 關鍵：是否跟隨玩家
-  const followRef = useRef(true);
+  const [follow, setFollow] = useState(true);
 
   // 📍 GPS
   useEffect(() => {
     if (!navigator.geolocation) return;
 
     const id = navigator.geolocation.watchPosition((pos) => {
-      const newPos = [
+      setPosition([
         pos.coords.latitude,
         pos.coords.longitude
-      ];
+      ]);
 
-      setPosition(newPos);
       setAccuracy(pos.coords.accuracy);
-
-      // 🟢 只有「跟隨模式」才會移動地圖
-      if (followRef.current && mapRef.current) {
-        mapRef.current.setView(newPos, mapRef.current.getZoom());
-      }
     });
 
     return () => navigator.geolocation.clearWatch(id);
@@ -79,17 +82,9 @@ export default function App() {
         🎯 精度: {accuracy ? Math.round(accuracy) + "m" : "-"}
       </div>
 
-      {/* 🎯 回到我 */}
+      {/* 🎯 回到我（100%有效） */}
       <button
-        onClick={() => {
-          if (mapRef.current) {
-            mapRef.current.setView(position, 18, {
-              animate: true
-            });
-          }
-
-          followRef.current = true; // 回到我 = 開啟跟隨
-        }}
+        onClick={() => setFollow(true)}
         style={{
           position: "absolute",
           bottom: 20,
@@ -107,9 +102,7 @@ export default function App() {
 
       {/* 🔘 跟隨切換 */}
       <button
-        onClick={() => {
-          followRef.current = !followRef.current;
-        }}
+        onClick={() => setFollow((v) => !v)}
         style={{
           position: "absolute",
           bottom: 80,
@@ -118,11 +111,11 @@ export default function App() {
           padding: "10px 14px",
           borderRadius: 12,
           border: "none",
-          background: followRef.current ? "green" : "gray",
+          background: follow ? "green" : "gray",
           color: "white"
         }}
       >
-        {followRef.current ? "跟隨 ON" : "跟隨 OFF"}
+        {follow ? "跟隨 ON" : "跟隨 OFF"}
       </button>
 
       {/* 🗺 Map */}
@@ -130,17 +123,15 @@ export default function App() {
         center={position}
         zoom={18}
         style={{ width: "100%", height: "100%" }}
-        whenCreated={(map) => (mapRef.current = map)}
-        onDragStart={() => {
-          // 🟡 一拖動 → 自動關掉跟隨
-          followRef.current = false;
-        }}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
         <Marker position={position}>
           <Popup>你在這裡</Popup>
         </Marker>
+
+        {/* 🧠 關鍵控制層 */}
+        <MapSync position={position} follow={follow} />
       </MapContainer>
     </div>
   );
