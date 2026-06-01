@@ -56,32 +56,30 @@ function getDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ---------------- Utils ----------------
+// ---------------- Copy ----------------
 function copyText(text) {
   navigator.clipboard.writeText(text);
   alert("已複製座標");
-}
-
-function openGoogleNav(lat, lng) {
-  const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-  window.open(url, "_blank");
-}
-
-function openGoogleMap(lat, lng) {
-  const url = `https://www.google.com/maps?q=${lat},${lng}`;
-  window.open(url, "_blank");
 }
 
 // ---------------- Map Controller ----------------
 function MapController({ position, follow, focusTarget }) {
   const map = useMap();
 
+  // GPS 跟隨
   useEffect(() => {
-    if (follow) map.panTo(position);
+    if (follow && position) {
+      map.panTo(position);
+    }
   }, [position, follow, map]);
 
+  // 點擊列表定位
   useEffect(() => {
-    if (focusTarget) map.panTo(focusTarget);
+    if (focusTarget) {
+      map.setView(focusTarget, map.getZoom(), {
+        animate: true
+      });
+    }
   }, [focusTarget, map]);
 
   return null;
@@ -238,7 +236,8 @@ export default function App() {
         zIndex: 99999,
         background: "white",
         padding: 10,
-        borderRadius: 10
+        borderRadius: 10,
+        minWidth: 160
       }}>
         <div>GPS精度：{Math.round(accuracy)}m</div>
         <div>速度：{speed} km/h</div>
@@ -279,23 +278,51 @@ export default function App() {
         ))}
       </div>
 
-      {/* 按鈕 */}
-      <button onClick={() => { setFollow(true); setFocusTarget(position); }}
-        style={{ position: "absolute", bottom: 20, right: 20, zIndex: 99999 }}>
+      {/* 控制按鈕 */}
+      <button
+        onClick={() => {
+          setFollow(true);
+          setFocusTarget(null);
+        }}
+        style={{
+          position: "absolute",
+          bottom: 20,
+          right: 20,
+          zIndex: 99999
+        }}
+      >
         🎯 回到我
       </button>
 
-      <button onClick={() => setFollow(v => !v)}
-        style={{ position: "absolute", bottom: 60, right: 20, zIndex: 99999 }}>
+      <button
+        onClick={() => setFollow((v) => !v)}
+        style={{
+          position: "absolute",
+          bottom: 60,
+          right: 20,
+          zIndex: 99999
+        }}
+      >
         {follow ? "跟隨 ON" : "跟隨 OFF"}
       </button>
 
-      <button onClick={() => setAddMode(v => !v)}
-        style={{ position: "absolute", bottom: 100, right: 20, zIndex: 99999 }}>
+      <button
+        onClick={() => setAddMode((v) => !v)}
+        style={{
+          position: "absolute",
+          bottom: 100,
+          right: 20,
+          zIndex: 99999
+        }}
+      >
         {addMode ? "新增菇 ON" : "新增菇 OFF"}
       </button>
 
-      <MapContainer center={position} zoom={18} style={{ width: "100%", height: "100%" }}>
+      <MapContainer
+        center={position}
+        zoom={18}
+        style={{ width: "100%", height: "100%" }}
+      >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
         <MapEvents setFollow={setFollow} />
@@ -320,7 +347,9 @@ export default function App() {
               <Circle
                 center={[Number(m.lat), Number(m.lng)]}
                 radius={40}
-                pathOptions={{ color: "green" }}
+                pathOptions={{
+                  color: "green"
+                }}
               />
 
               <Marker
@@ -338,31 +367,31 @@ export default function App() {
 
                   <hr />
 
-                  <button onClick={() => copyText(`${m.lat}, ${m.lng}`)}>
+                  <button
+                    onClick={() =>
+                      copyText(`${m.lat}, ${m.lng}`)
+                    }
+                  >
                     📋 複製座標
                   </button>
 
                   <br />
 
-                  <button onClick={() => openGoogleNav(m.lat, m.lng)}>
-                    🧭 Google導航
+                  <button
+                    onClick={() =>
+                      toggleFavorite(m.id)
+                    }
+                  >
+                    {isFavorite(m.id)
+                      ? "⭐ 已收藏"
+                      : "☆ 收藏"}
                   </button>
 
                   <br />
 
-                  <button onClick={() => openGoogleMap(m.lat, m.lng)}>
-                    🌍 開啟地圖
-                  </button>
-
-                  <br />
-
-                  <button onClick={() => toggleFavorite(m.id)}>
-                    {isFavorite(m.id) ? "⭐ 已收藏" : "☆ 收藏"}
-                  </button>
-
-                  <br />
-
-                  {distance <= 40 ? "🟢 可互動" : "🔒 距離過遠"}
+                  {distance <= 40
+                    ? "🟢 可互動"
+                    : "🔒 距離過遠"}
                 </Popup>
               </Marker>
             </Fragment>
