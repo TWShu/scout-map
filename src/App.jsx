@@ -22,17 +22,70 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
-// ---------------- Map Controller ----------------
-function MapController({ position }) {
+// ---------------- Map Controls ----------------
+function MapControls({ position }) {
   const map = useMap();
 
-  useEffect(() => {
-    if (position) {
-      map.setView(position);
-    }
-  }, [position, map]);
+  return (
+    <>
+      {/* 🎯 回到我 */}
+      <button
+        onClick={() => map.setView(position, 18, { animate: true })}
+        style={{
+          position: "absolute",
+          bottom: 20,
+          right: 20,
+          zIndex: 9999,
+          padding: "10px 14px",
+          borderRadius: 12,
+          border: "none",
+          background: "#111",
+          color: "white"
+        }}
+      >
+        🎯 回到我
+      </button>
 
-  return null;
+      {/* 🔍 自訂縮放控制 */}
+      <div
+        style={{
+          position: "absolute",
+          top: 10,
+          right: 10,
+          zIndex: 9999,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6
+        }}
+      >
+        <button
+          onClick={() => map.zoomIn()}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 8,
+            border: "none",
+            fontSize: 18
+          }}
+        >
+          +
+        </button>
+
+        <button
+          onClick={() => map.zoomOut()}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 8,
+            border: "none",
+            fontSize: 18
+          }}
+        >
+          -
+        </button>
+      </div>
+    </>
+  );
 }
 
 // ---------------- Main App ----------------
@@ -45,10 +98,10 @@ export default function App() {
   const [accuracy, setAccuracy] = useState(null);
   const [speed, setSpeed] = useState(null);
 
-  const map = useMapSafe();
-
   // 📍 GPS
   useEffect(() => {
+    if (!navigator.geolocation) return;
+
     const id = navigator.geolocation.watchPosition((pos) => {
       setPosition([
         pos.coords.latitude,
@@ -65,17 +118,18 @@ export default function App() {
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
 
-      {/* 🧭 HUD */}
+      {/* 🧭 HUD（右上資訊） */}
       <div
         style={{
           position: "absolute",
           top: 10,
-          right: 10,
-          zIndex: 999,
+          left: 10,
+          zIndex: 9999,
           background: "white",
           padding: 10,
           borderRadius: 10,
-          fontSize: 12
+          fontSize: 12,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
         }}
       >
         <div>📍 Lat: {position[0].toFixed(6)}</div>
@@ -84,32 +138,11 @@ export default function App() {
         <div>🚀 速度: {speed ? `${speed.toFixed(1)} m/s` : "-"}</div>
       </div>
 
-      {/* 🎯 回到我（關鍵修復） */}
-      <button
-        onClick={() => {
-          map?.setView(position, 18, {
-            animate: true
-          });
-        }}
-        style={{
-          position: "absolute",
-          bottom: 20,
-          right: 20,
-          zIndex: 999,
-          padding: "10px 14px",
-          borderRadius: 12,
-          border: "none",
-          background: "#111",
-          color: "white"
-        }}
-      >
-        🎯 回到我
-      </button>
-
       {/* 🗺 地圖 */}
       <MapContainer
         center={position}
         zoom={18}
+        zoomControl={false}   // ❗ 關掉預設 zoom（避免重疊）
         style={{ width: "100%", height: "100%" }}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -118,17 +151,9 @@ export default function App() {
           <Popup>你在這裡</Popup>
         </Marker>
 
-        <MapController position={position} />
+        {/* 🧭 控制 UI */}
+        <MapControls position={position} />
       </MapContainer>
     </div>
   );
-}
-
-// ---------------- safe hook ----------------
-function useMapSafe() {
-  try {
-    return useMap();
-  } catch {
-    return null;
-  }
 }
