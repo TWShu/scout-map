@@ -54,7 +54,7 @@ function MapInit({ position }) {
 }
 
 // ------------------------------
-// follow mode（可開關）
+// follow mode
 // ------------------------------
 function FollowMode({ position, follow }) {
   const map = useMap();
@@ -113,7 +113,7 @@ export default function App() {
   const [follow, setFollow] = useState(false);
   const [hudOpen, setHudOpen] = useState(true);
 
-  // 🌼 POI（花 / 菇狀態）
+  // 🌼 POI（花 / 菇）
   const [pois, setPois] = useState([
     {
       id: 1,
@@ -172,6 +172,7 @@ export default function App() {
     pois.forEach((p) => {
       const dx = p.pos[0] - lat;
       const dy = p.pos[1] - lng;
+
       if (Math.sqrt(dx * dx + dy * dy) < 0.002) {
         count++;
       }
@@ -180,7 +181,7 @@ export default function App() {
     return count;
   }, [lat, lng, pois]);
 
-  // 🎮 POI interaction
+  // 🎮 interact
   function interactPOI(id) {
     setPois((prev) =>
       prev.map((p) => {
@@ -267,8 +268,7 @@ export default function App() {
                 padding: 6,
                 borderRadius: 8,
                 border: "none",
-                background: follow ? "#4ade80" : "#e5e7eb",
-                cursor: "pointer"
+                background: follow ? "#4ade80" : "#e5e7eb"
               }}
             >
               {follow ? "📍 跟隨模式" : "🧭 自由模式"}
@@ -288,29 +288,56 @@ export default function App() {
         <MapInit position={position} />
         <FollowMode position={position} follow={follow} />
 
-        {/* 🌼 POI */}
-        {pois.map((p) => (
-          <Marker
-            key={p.id}
-            position={p.pos}
-            eventHandlers={{
-              click: () => interactPOI(p.id)
-            }}
-          >
-            <Popup>
-              <b>{p.name}</b>
-              <br />
+        {/* 🌼 POI（重點：狀態顏色） */}
+        {pois.map((p) => {
+          const isReady = p.cooldown === 0;
 
-              {p.cooldown === 0 ? (
-                <span style={{ color: "green" }}>✅ 可用</span>
-              ) : (
-                <span style={{ color: "red" }}>
-                  ⏳ 冷卻 {p.cooldown}s
-                </span>
-              )}
-            </Popup>
-          </Marker>
-        ))}
+          const color =
+            p.type === "flower"
+              ? isReady ? "green" : "red"
+              : isReady ? "orange" : "gray";
+
+          const icon = L.divIcon({
+            className: "",
+            html: `
+              <div style="
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: ${color};
+                border: 2px solid white;
+                box-shadow: 0 0 6px rgba(0,0,0,0.4);
+              "></div>
+            `,
+            iconSize: [18, 18]
+          });
+
+          return (
+            <Marker
+              key={p.id}
+              position={p.pos}
+              icon={icon}
+              eventHandlers={{
+                click: () => interactPOI(p.id)
+              }}
+            >
+              <Popup>
+                <b>{p.name}</b>
+                <br />
+                {p.type === "flower" ? "🌼 花點" : "🍄 菇點"}
+                <br />
+
+                {isReady ? (
+                  <span style={{ color: "green" }}>✅ 可用</span>
+                ) : (
+                  <span style={{ color: "red" }}>
+                    ⏳ 冷卻 {p.cooldown}s
+                  </span>
+                )}
+              </Popup>
+            </Marker>
+          );
+        })}
 
         <Recenter position={position} />
       </MapContainer>
