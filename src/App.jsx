@@ -1,6 +1,4 @@
-from pathlib import Path
-
-code = r'''import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   MapContainer,
   TileLayer,
