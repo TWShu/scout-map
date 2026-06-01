@@ -4,14 +4,13 @@ import {
   TileLayer,
   Marker,
   Popup,
-  Polygon,
   useMap
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
 // ------------------------------
-// Leaflet fix
+// Leaflet icon fix
 // ------------------------------
 delete L.Icon.Default.prototype._getIconUrl;
 
@@ -25,7 +24,7 @@ L.Icon.Default.mergeOptions({
 });
 
 // ------------------------------
-// S2
+// S2 fallback（避免 crash）
 // ------------------------------
 let S2 = null;
 try {
@@ -34,36 +33,37 @@ try {
   console.log("S2 fallback mode");
 }
 
-// ------------------------------
-// fallback（避免 crash）
-// ------------------------------
 function fakeCell(lat, lng, level) {
   const scale = level === 14 ? 10000 : 100000;
   return `${Math.floor(lat * scale)}_${Math.floor(lng * scale)}_L${level}`;
 }
 
 // ------------------------------
-// map init（避免跳動）
+// 地圖初始化（避免跳動）
 // ------------------------------
 function MapInit({ position }) {
   const map = useMap();
 
   useEffect(() => {
-    map.setView(position, map.getZoom(), { animate: false });
+    map.setView(position, map.getZoom(), {
+      animate: false
+    });
   }, []);
 
   return null;
 }
 
 // ------------------------------
-// follow mode
+// follow mode（可開關）
 // ------------------------------
 function FollowMode({ position, follow }) {
   const map = useMap();
 
   useEffect(() => {
     if (follow) {
-      map.setView(position, map.getZoom(), { animate: false });
+      map.setView(position, map.getZoom(), {
+        animate: false
+      });
     }
   }, [position, follow]);
 
@@ -79,7 +79,9 @@ function Recenter({ position }) {
   return (
     <button
       onClick={() =>
-        map.setView(position, map.getZoom(), { animate: false })
+        map.setView(position, map.getZoom(), {
+          animate: false
+        })
       }
       style={{
         position: "fixed",
@@ -107,12 +109,11 @@ export default function App() {
 
   const [accuracy, setAccuracy] = useState(null);
   const [speed, setSpeed] = useState(null);
+
   const [follow, setFollow] = useState(false);
   const [hudOpen, setHudOpen] = useState(true);
 
-  // ------------------------------
-  // 🌼 POI（Pikmin Bloom 世界）
-  // ------------------------------
+  // 🌼 POI（花 / 菇狀態）
   const [pois, setPois] = useState([
     {
       id: 1,
@@ -127,19 +128,10 @@ export default function App() {
       name: "🍄 菇點 B",
       pos: [25.035, 121.566],
       cooldown: 0
-    },
-    {
-      id: 3,
-      type: "flower",
-      name: "🌼 花點 C",
-      pos: [25.0328, 121.5654],
-      cooldown: 0
     }
   ]);
 
-  // ------------------------------
-  // GPS
-  // ------------------------------
+  // 📍 GPS
   useEffect(() => {
     const id = navigator.geolocation.watchPosition(
       (pos) => {
@@ -164,9 +156,7 @@ export default function App() {
   const lat = position[0];
   const lng = position[1];
 
-  // ------------------------------
-  // 🧭 S2 (real)
-  // ------------------------------
+  // 🟨 S2
   const cell14 = S2?.latLngToKey
     ? S2.latLngToKey(lat, lng, 14)
     : fakeCell(lat, lng, 14);
@@ -175,35 +165,44 @@ export default function App() {
     ? S2.latLngToKey(lat, lng, 17)
     : fakeCell(lat, lng, 17);
 
-  // ------------------------------
-  // 🌡 heatmap（區域熱度）
-  // ------------------------------
+  // 🌡 heat（附近 POI）
   const heat = useMemo(() => {
     let count = 0;
 
     pois.forEach((p) => {
       const dx = p.pos[0] - lat;
       const dy = p.pos[1] - lng;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      if (dist < 0.002) count++;
+      if (Math.sqrt(dx * dx + dy * dy) < 0.002) {
+        count++;
+      }
     });
 
     return count;
   }, [lat, lng, pois]);
 
-  // ------------------------------
-  // 🍄 spawn / cooldown system
-  // ------------------------------
+  // 🎮 POI interaction
+  function interactPOI(id) {
+    setPois((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        if (p.cooldown > 0) return p;
+
+        return {
+          ...p,
+          cooldown: p.type === "flower" ? 10 : 20
+        };
+      })
+    );
+  }
+
+  // ⏳ cooldown timer
   useEffect(() => {
     const timer = setInterval(() => {
       setPois((prev) =>
-        prev.map((p) => {
-          if (p.cooldown > 0) {
-            return { ...p, cooldown: p.cooldown - 1 };
-          }
-          return p;
-        })
+        prev.map((p) => ({
+          ...p,
+          cooldown: Math.max(0, p.cooldown - 1)
+        }))
       );
     }, 1000);
 
@@ -246,6 +245,9 @@ export default function App() {
             <div>
               GPS: {accuracy ? `${Math.round(accuracy)}m` : "-"}
             </div>
+            <div>
+              Speed: {speed ? `${(speed * 3.6).toFixed(1)} km/h` : "0"}
+            </div>
 
             <hr />
 
@@ -256,18 +258,20 @@ export default function App() {
 
             <div>🌡 Heat: {heat}</div>
 
+            <hr />
+
             <button
               onClick={() => setFollow(!follow)}
               style={{
                 width: "100%",
-                marginTop: 8,
                 padding: 6,
                 borderRadius: 8,
                 border: "none",
-                background: follow ? "#4ade80" : "#e5e7eb"
+                background: follow ? "#4ade80" : "#e5e7eb",
+                cursor: "pointer"
               }}
             >
-              {follow ? "📍 跟隨" : "🧭 自由"}
+              {follow ? "📍 跟隨模式" : "🧭 自由模式"}
             </button>
           </div>
         )}
@@ -286,11 +290,24 @@ export default function App() {
 
         {/* 🌼 POI */}
         {pois.map((p) => (
-          <Marker key={p.id} position={p.pos}>
+          <Marker
+            key={p.id}
+            position={p.pos}
+            eventHandlers={{
+              click: () => interactPOI(p.id)
+            }}
+          >
             <Popup>
-              {p.name}
+              <b>{p.name}</b>
               <br />
-              {p.cooldown > 0 ? "⏳ 冷卻中" : "✅ 可互動"}
+
+              {p.cooldown === 0 ? (
+                <span style={{ color: "green" }}>✅ 可用</span>
+              ) : (
+                <span style={{ color: "red" }}>
+                  ⏳ 冷卻 {p.cooldown}s
+                </span>
+              )}
             </Popup>
           </Marker>
         ))}
