@@ -36,21 +36,27 @@ export default function App() {
   const [position, setPosition] = useState([25.033964, 121.564468]);
 
   useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setPosition([
-          pos.coords.latitude,
-          pos.coords.longitude
-        ]);
-      },
-      (err) => {
-        console.log(err);
-      },
-      {
-        enableHighAccuracy: true
-      }
-    );
-  }, []);
+  const watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      setPosition([
+        pos.coords.latitude,
+        pos.coords.longitude
+      ]);
+    },
+    (err) => {
+      console.log(err);
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 1000,
+      timeout: 10000
+    }
+  );
+
+  return () => {
+    navigator.geolocation.clearWatch(watchId);
+  };
+}, []);
 
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
