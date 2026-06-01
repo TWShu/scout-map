@@ -28,7 +28,6 @@ const mushroomIcon = L.divIcon({
 // ---------------- distance ----------------
 function getDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
-
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
 
@@ -49,7 +48,7 @@ export default function App() {
   const [gps, setGps] = useState([25.033964, 121.564468]);
   const [mushrooms, setMushrooms] = useState([]);
 
-  // ---------------- GPS (only data) ----------------
+  // ---------------- GPS ----------------
   useEffect(() => {
     const id = navigator.geolocation.watchPosition((pos) => {
       setGps([pos.coords.latitude, pos.coords.longitude]);
@@ -67,34 +66,41 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // ---------------- SAFE MAP ENGINE ----------------
+  // ---------------- FIX ENGINE ----------------
   const moveTo = (latlng, zoom = 18) => {
     const map = mapRef.current;
     if (!map) return;
 
-    // 1️⃣ fly animation
-    map.flyTo(latlng, zoom, {
-      duration: 0.8
-    });
+    map.flyTo(latlng, zoom, { duration: 0.8 });
 
-    // 2️⃣ FIX TILE RENDER (核心)
+    // 🔥 核心修復：等 frame stable 再 refresh
     requestAnimationFrame(() => {
-      setTimeout(() => {
+      requestAnimationFrame(() => {
         map.invalidateSize(true);
-      }, 50);
+        map._onResize(); // 強制 leaflet 重算 canvas
+      });
     });
   };
 
-  const returnToMe = () => {
-    moveTo(gps, 18);
-  };
+  const returnToMe = () => moveTo(gps, 18);
 
-  // ---------------- map binder ----------------
+  // ---------------- bind map ----------------
   function MapBinder() {
     const map = useMap();
 
     useEffect(() => {
       mapRef.current = map;
+
+      // 🔥 防灰核心：監控 container size
+      const ro = new ResizeObserver(() => {
+        map.invalidateSize(true);
+      });
+
+      if (containerRef.current) {
+        ro.observe(containerRef.current);
+      }
+
+      return () => ro.disconnect();
     }, [map]);
 
     return null;
@@ -123,8 +129,6 @@ export default function App() {
         background: "white",
         padding: 10
       }}>
-        <div>🍄 {mushrooms.length}</div>
-
         <button onClick={returnToMe}>
           🎯 回到我
         </button>
@@ -138,9 +142,7 @@ export default function App() {
         right: 10,
         background: "white",
         padding: 10,
-        width: 180,
-        maxHeight: 300,
-        overflowY: "auto"
+        width: 180
       }}>
         <b>菇點</b>
 
@@ -164,9 +166,7 @@ export default function App() {
 
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          updateWhenIdle={false}
-          updateWhenZooming={false}
-          keepBuffer={2}
+          keepBuffer={4}
         />
 
         <MapBinder />
