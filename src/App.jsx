@@ -176,3 +176,13 @@ export default function App() {
           boxShadow: "0 0 6px rgba(0,0,0,0.3)",
           display: "flex",
           alignItems: "center",
+          justifyContent: "center",
+          fontSize: "24px",
+          transform: `rotate(${heading}deg)`
+        }}
+      >
+        🧭
+      </div>
+    </div>
+  );
+          }
