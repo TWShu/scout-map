@@ -70,6 +70,7 @@ export default function App() {
   const [mushrooms, setMushrooms] = useState([]);
 
   const [addMode, setAddMode] = useState(false);
+  const [followMode, setFollowMode] = useState("SMART");
 
   // ================= INPUT =================
   const [coordInput, setCoordInput] = useState("");
@@ -77,8 +78,9 @@ export default function App() {
   const [batchInput, setBatchInput] = useState("");
   const [batchList, setBatchList] = useState([]);
   const [batchOpen, setBatchOpen] = useState(true);
+  const [batchHeight, setBatchHeight] = useState(100);
 
-  const [batchHeight, setBatchHeight] = useState(90);
+  const lastRef = useRef(null);
 
   // ---------------- parse ----------------
   const parseCoord = (text) => {
@@ -87,12 +89,8 @@ export default function App() {
     return { lat: +m[1], lng: +m[2] };
   };
 
-  const parseBatch = (text) => {
-    return text
-      .split("\n")
-      .map(parseCoord)
-      .filter(Boolean);
-  };
+  const parseBatch = (text) =>
+    text.split("\n").map(parseCoord).filter(Boolean);
 
   // ---------------- GPS ----------------
   useEffect(() => {
@@ -110,13 +108,31 @@ export default function App() {
       const map = mapRef.current;
       if (!map) return;
 
-      map.setView(next);
+      if (followMode === "GPS") {
+        map.setView(next);
+      }
+
+      if (followMode === "SMART") {
+        const last = lastRef.current;
+
+        if (!last) {
+          lastRef.current = next;
+          return;
+        }
+
+        const d = getDistance(last.lat, last.lng, next.lat, next.lng);
+
+        if (d > 30) {
+          map.setView(next);
+          lastRef.current = next;
+        }
+      }
     });
 
     return () => navigator.geolocation.clearWatch(id);
-  }, []);
+  }, [followMode]);
 
-  // ---------------- FIRESTORE ----------------
+  // ---------------- FIREBASE ----------------
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "mushrooms"), (snap) => {
       setMushrooms(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -125,7 +141,7 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // ---------------- MAP BIND ----------------
+  // ---------------- MAP ----------------
   function MapBinder() {
     const map = useMap();
     useEffect(() => {
@@ -134,13 +150,20 @@ export default function App() {
     return null;
   }
 
-  // ---------------- INPUT ACTION ----------------
+  // ---------------- ACTIONS ----------------
   const moveTo = (lat, lng) => {
     const map = mapRef.current;
     if (!map) return;
     map.setView([lat, lng], 19);
   };
 
+  const returnToMe = () => {
+    if (!gps) return;
+    moveTo(gps.lat, gps.lng);
+    setFollowMode("GPS");
+  };
+
+  // ---------------- SINGLE INPUT ----------------
   const goInput = () => {
     const r = parseCoord(coordInput);
     if (!r) return alert("格式錯誤");
@@ -151,7 +174,7 @@ export default function App() {
     const r = parseCoord(coordInput);
     if (!r) return alert("格式錯誤");
 
-    const name = prompt("名稱");
+    const name = prompt("菇點名稱");
     if (!name) return;
 
     await addDoc(collection(db, "mushrooms"), {
@@ -180,9 +203,40 @@ export default function App() {
       });
     }
 
-    alert("完成");
+    alert("批量完成");
     setBatchInput("");
     setBatchList([]);
+  };
+
+  // ---------------- ADD CLICK ----------------
+  function AddMushroom() {
+    useMapEvents({
+      async click(e) {
+        if (!addMode) return;
+
+        const name = prompt("菇點名稱");
+        if (!name) return;
+
+        await addDoc(collection(db, "mushrooms"), {
+          name,
+          lat: e.latlng.lat,
+          lng: e.latlng.lng
+        });
+      }
+    });
+    return null;
+  }
+
+  // ---------------- CRUD ----------------
+  const updateName = async (id, name) => {
+    const n = prompt("修改名稱", name);
+    if (!n) return;
+    await updateDoc(doc(db, "mushrooms", id), { name: n });
+  };
+
+  const deleteM = async (id) => {
+    if (!confirm("刪除？")) return;
+    await deleteDoc(doc(db, "mushrooms", id));
   };
 
   // ---------------- LOADING ----------------
@@ -209,13 +263,29 @@ export default function App() {
         top: 10,
         right: 10,
         zIndex: 999999,
+        width: 260,
         display: "flex",
         flexDirection: "column",
-        gap: 6,
-        width: 240
+        gap: 6
       }}>
 
-        {/* SINGLE */}
+        <button onClick={returnToMe}>🎯 回到我</button>
+
+        <button onClick={() => setAddMode(v => !v)}>
+          {addMode ? "🍄 新增 ON" : "🍄 新增 OFF"}
+        </button>
+
+        <button onClick={() =>
+          setFollowMode(m =>
+            m === "OFF" ? "GPS" :
+            m === "GPS" ? "SMART" :
+            "OFF"
+          )
+        }>
+          跟隨：{followMode}
+        </button>
+
+        {/* SINGLE INPUT */}
         <div style={{ background: "#eee", padding: 6 }}>
           <input
             placeholder="lat,lng"
@@ -223,23 +293,15 @@ export default function App() {
             onChange={(e) => setCoordInput(e.target.value)}
             style={{ width: "100%" }}
           />
-
           <button onClick={goInput}>🧭 移動</button>
           <button onClick={createInput}>🍄 建立</button>
         </div>
 
         {/* BATCH */}
-        <div style={{
-          background: "#ddd",
-          padding: 6
-        }}>
+        <div style={{ background: "#ddd", padding: 6 }}>
 
-          <div style={{
-            display: "flex",
-            justifyContent: "space-between"
-          }}>
-            <b>📦 批量</b>
-
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <b>📦 批量輸入</b>
             <button onClick={() => setBatchOpen(v => !v)}>
               {batchOpen ? "收合" : "展開"}
             </button>
@@ -253,21 +315,18 @@ export default function App() {
                 style={{
                   width: "100%",
                   height: batchHeight,
-                  resize: "vertical"
+                  resize: "none"
                 }}
-                placeholder={"25.03,121.56\n25.04,121.57"}
               />
 
-              {/* resize bar */}
+              {/* resize handle */}
               <div
                 onMouseDown={(e) => {
                   const startY = e.clientY;
                   const startH = batchHeight;
 
                   const move = (ev) => {
-                    setBatchHeight(
-                      Math.max(60, startH + ev.clientY - startY)
-                    );
+                    setBatchHeight(Math.max(60, startH + ev.clientY - startY));
                   };
 
                   const up = () => {
@@ -280,8 +339,8 @@ export default function App() {
                 }}
                 style={{
                   height: 6,
+                  background: "#999",
                   cursor: "row-resize",
-                  background: "#aaa",
                   marginTop: 4
                 }}
               />
@@ -299,7 +358,6 @@ export default function App() {
             </>
           )}
         </div>
-
       </div>
 
       {/* MAP */}
@@ -308,10 +366,10 @@ export default function App() {
         zoom={18}
         style={{ width: "100%", height: "100%" }}
       >
-
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
         <MapBinder />
+        <AddMushroom />
 
         <Marker position={[gps.lat, gps.lng]}>
           <Popup>你在這裡</Popup>
@@ -321,19 +379,26 @@ export default function App() {
           <Fragment key={m.id}>
             <Circle center={[m.lat, m.lng]} radius={40} />
 
-            <Marker
-              position={[m.lat, m.lng]}
-              icon={mushroomIcon}
-            >
+            <Marker position={[m.lat, m.lng]} icon={L.divIcon({ html: "🍄" })}>
               <Popup>
-                {m.name}
-                <br />
-                📍 {m.lat}, {m.lng}
+                <b>{m.name}</b>
+                <hr />
+
+                <button onClick={() => navigator.clipboard.writeText(`${m.lat},${m.lng}`)}>
+                  📋 複製
+                </button>
+
+                <button onClick={() => updateName(m.id, m.name)}>
+                  ✏️ 改名
+                </button>
+
+                <button onClick={() => deleteM(m.id)}>
+                  ❌ 刪除
+                </button>
               </Popup>
             </Marker>
           </Fragment>
         ))}
-
       </MapContainer>
     </div>
   );
