@@ -11,7 +11,6 @@ import {
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-
 import { db } from "./firebase";
 import { collection, onSnapshot, addDoc } from "firebase/firestore";
 
@@ -52,10 +51,9 @@ function getDistance(lat1, lng1, lat2, lng2) {
 }
 
 // ---------------- direction ----------------
-function getDirectionArrow(lat1, lng1, lat2, lng2) {
+function getArrow(lat1, lng1, lat2, lng2) {
   const dx = lng2 - lng1;
   const dy = lat2 - lat1;
-
   const angle = Math.atan2(dy, dx) * 180 / Math.PI;
 
   if (angle >= -22.5 && angle < 22.5) return "➡️";
@@ -68,7 +66,7 @@ function getDirectionArrow(lat1, lng1, lat2, lng2) {
   return "⬅️";
 }
 
-// ---------------- MAIN APP ----------------
+// ---------------- MAIN ----------------
 export default function App() {
 
   const mapRef = useRef(null);
@@ -82,8 +80,9 @@ export default function App() {
 
   const [addMode, setAddMode] = useState(false);
 
-  // OFF / GPS / SMART
   const [followMode, setFollowMode] = useState("SMART");
+
+  const [navOpen, setNavOpen] = useState(true);
 
   const lastRef = useRef(null);
 
@@ -100,12 +99,10 @@ export default function App() {
       const map = mapRef.current;
       if (!map) return;
 
-      // GPS 跟隨
       if (followMode === "GPS") {
         map.setView(next);
       }
 
-      // SMART 跟隨（避免亂跳）
       if (followMode === "SMART") {
         const last = lastRef.current;
 
@@ -207,42 +204,62 @@ export default function App() {
 
       </div>
 
-      {/* ================= LIST ================= */}
+      {/* ================= NAVIGATION PANEL ================= */}
       <div style={{
         position: "fixed",
         top: 120,
         right: 10,
         zIndex: 999999,
+        width: navOpen ? 220 : 40,
         background: "white",
-        padding: 10,
-        width: 220,
-        maxHeight: 320,
-        overflowY: "auto"
+        border: "1px solid #ddd",
+        borderRadius: 8,
+        overflow: "hidden",
+        transition: "0.2s"
       }}>
-        <b>🍄 菇點導航</b>
 
-        {mushrooms.map(m => {
-          const d = getDistance(gps.lat, gps.lng, m.lat, m.lng);
-          const arrow = getDirectionArrow(gps.lat, gps.lng, m.lat, m.lng);
+        {/* header */}
+        <div
+          onClick={() => setNavOpen(v => !v)}
+          style={{
+            padding: 8,
+            cursor: "pointer",
+            fontWeight: "bold",
+            background: "#f5f5f5"
+          }}
+        >
+          🍄 {navOpen ? "菇點導航" : "🍄"}
+        </div>
 
-          return (
-            <div
-              key={m.id}
-              onClick={() => moveTo(m.lat, m.lng)}
-              style={{
-                cursor: "pointer",
-                marginTop: 10,
-                paddingBottom: 6,
-                borderBottom: "1px solid #eee"
-              }}
-            >
-              {arrow} {m.name}
-              <div style={{ fontSize: 12, opacity: 0.6 }}>
-                {Math.round(d)} m
-              </div>
-            </div>
-          );
-        })}
+        {navOpen && (
+          <div style={{
+            maxHeight: 300,
+            overflowY: "auto",
+            padding: 8
+          }}>
+            {mushrooms.map(m => {
+              const d = getDistance(gps.lat, gps.lng, m.lat, m.lng);
+              const arrow = getArrow(gps.lat, gps.lng, m.lat, m.lng);
+
+              return (
+                <div
+                  key={m.id}
+                  onClick={() => moveTo(m.lat, m.lng)}
+                  style={{
+                    cursor: "pointer",
+                    padding: "6px 0",
+                    borderBottom: "1px solid #eee"
+                  }}
+                >
+                  {arrow} {m.name}
+                  <div style={{ fontSize: 12, opacity: 0.6 }}>
+                    {Math.round(d)} m
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ================= MAP ================= */}
@@ -262,62 +279,36 @@ export default function App() {
         </Marker>
 
         {/* 菇點 */}
-        {mushrooms.map(m => {
-          const d = getDistance(gps.lat, gps.lng, m.lat, m.lng);
+        {mushrooms.map(m => (
+          <Fragment key={m.id}>
 
-          return (
-            <Fragment key={m.id}>
+            <Circle center={[m.lat, m.lng]} radius={40} />
 
-              <Circle center={[m.lat, m.lng]} radius={40} />
+            <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
+              <Popup>
 
-              <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
-                <Popup>
+                <b>{m.name}</b>
+                <hr />
 
-                  <b>{m.name}</b>
-                  <hr />
+                📍 {m.lat}, {m.lng}
 
-                  📍 {m.lat}, {m.lng}
-                  <br />
-                  📏 {Math.round(d)} m
+                <br /><br />
 
-                  <hr />
+                {/* 📋 複製座標 */}
+                <button
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(`${m.lat},${m.lng}`);
+                    alert("已複製座標");
+                  }}
+                >
+                  📋 複製座標
+                </button>
 
-                  {/* 📋 複製 */}
-                  <button
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(`${m.lat},${m.lng}`);
-                      alert("已複製座標");
-                    }}
-                  >
-                    📋 複製座標
-                  </button>
+              </Popup>
+            </Marker>
 
-                  <br />
-
-                  {/* 🧭 Google Maps */}
-                  <button
-                    onClick={async () => {
-                      const url = `https://www.google.com/maps?q=${m.lat},${m.lng}`;
-                      await navigator.clipboard.writeText(url);
-                      alert("已複製導航連結");
-                    }}
-                  >
-                    🧭 Google Maps
-                  </button>
-
-                  <br />
-
-                  {/* 🎯 移動 */}
-                  <button onClick={() => moveTo(m.lat, m.lng)}>
-                    🎯 移動到這裡
-                  </button>
-
-                </Popup>
-              </Marker>
-
-            </Fragment>
-          );
-        })}
+          </Fragment>
+        ))}
 
       </MapContainer>
     </div>
