@@ -4,7 +4,7 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
 import { db } from "./firebase";
-import { collection, onSnapshot, addDoc, writeBatch } from "firebase/firestore";
+import { collection, onSnapshot, writeBatch } from "firebase/firestore";
 
 // ---------------- Leaflet fix ----------------
 delete L.Icon.Default.prototype._getIconUrl;
@@ -18,6 +18,7 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
+// ---------------- icon ----------------
 const mushroomIcon = L.divIcon({
   html: "🍄",
   className: "",
@@ -41,7 +42,7 @@ function getDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ---------------- CSV PARSER ----------------
+// ---------------- CSV ----------------
 function parseCSV(text) {
   const lines = text.trim().split("\n");
   const headers = lines[0].split(",");
@@ -49,11 +50,9 @@ function parseCSV(text) {
   return lines.slice(1).map(line => {
     const values = line.split(",");
     const obj = {};
-
     headers.forEach((h, i) => {
       obj[h.trim()] = values[i]?.trim();
     });
-
     return obj;
   });
 }
@@ -69,6 +68,7 @@ export default function App() {
   });
 
   const [mushrooms, setMushrooms] = useState([]);
+  const [panelOpen, setPanelOpen] = useState(true);
 
   // ---------------- GPS ----------------
   useEffect(() => {
@@ -85,14 +85,16 @@ export default function App() {
   // ---------------- FIRESTORE ----------------
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "mushrooms"), (snap) => {
-      setMushrooms(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setMushrooms(
+        snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      );
     });
 
     return () => unsub();
   }, []);
 
-  // ---------------- MOVE ENGINE ----------------
-  const moveTo = (lat, lng, zoom = 18) => {
+  // ---------------- MOVE ----------------
+  const moveTo = (lat, lng, zoom = 19) => {
     const map = mapRef.current;
     if (!map) return;
 
@@ -104,7 +106,7 @@ export default function App() {
     moveTo(gps.lat, gps.lng, 18);
   };
 
-  // ---------------- IMPORT FUNCTION ----------------
+  // ---------------- IMPORT ----------------
   const importJSON = async (file) => {
     const text = await file.text();
     const data = JSON.parse(text);
@@ -116,9 +118,7 @@ export default function App() {
       batch.set(ref, {
         name: item.name,
         lat: Number(item.lat),
-        lng: Number(item.lng),
-        power: Number(item.power || 50),
-        createdAt: new Date()
+        lng: Number(item.lng)
       });
     });
 
@@ -137,9 +137,7 @@ export default function App() {
       batch.set(ref, {
         name: item.name,
         lat: Number(item.lat),
-        lng: Number(item.lng),
-        power: Number(item.power || 50),
-        createdAt: new Date()
+        lng: Number(item.lng)
       });
     });
 
@@ -147,6 +145,7 @@ export default function App() {
     alert("CSV 匯入完成");
   };
 
+  // ---------------- SORT ----------------
   const sorted = useMemo(() => {
     return [...mushrooms].sort((a, b) => {
       const da = getDistance(gps.lat, gps.lng, a.lat, a.lng);
@@ -166,52 +165,53 @@ export default function App() {
   }
 
   return (
-    <div style={{ width: "100vw", height: "100vh" }}>
+    <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
 
-      {/* UI */}
+      {/* ===== IMPORT PANEL ===== */}
       <div style={{
         position: "absolute",
-        zIndex: 9999,
         top: 10,
         right: 10,
+        zIndex: 9999,
         background: "white",
+        borderRadius: 10,
+        width: panelOpen ? 240 : 60,
         padding: 10,
-        width: 200
+        overflow: "hidden",
+        transition: "0.2s"
       }}>
-
-        <button onClick={returnToMe}>
-          🎯 回到我
-        </button>
-
-        <hr />
-
-        {/* IMPORT */}
-        <div>
-          <b>📥 匯入 JSON</b>
-          <input
-            type="file"
-            accept=".json"
-            onChange={(e) => importJSON(e.target.files[0])}
-          />
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <b>📥 匯入</b>
+          <button onClick={() => setPanelOpen(v => !v)}>
+            {panelOpen ? "−" : "+"}
+          </button>
         </div>
 
-        <div style={{ marginTop: 10 }}>
-          <b>📥 匯入 CSV</b>
-          <input
-            type="file"
-            accept=".csv"
-            onChange={(e) => importCSV(e.target.files[0])}
-          />
-        </div>
+        {panelOpen && (
+          <>
+            <div style={{ marginTop: 10 }}>
+              JSON
+              <input type="file" accept=".json" onChange={(e) => importJSON(e.target.files[0])} />
+            </div>
 
+            <div style={{ marginTop: 10 }}>
+              CSV
+              <input type="file" accept=".csv" onChange={(e) => importCSV(e.target.files[0])} />
+            </div>
+
+            <button style={{ marginTop: 10 }} onClick={returnToMe}>
+              🎯 回到我
+            </button>
+          </>
+        )}
       </div>
 
-      {/* list */}
+      {/* LIST */}
       <div style={{
         position: "absolute",
-        zIndex: 9999,
-        top: 160,
+        top: 140,
         right: 10,
+        zIndex: 9999,
         background: "white",
         padding: 10,
         width: 180,
@@ -238,30 +238,67 @@ export default function App() {
         style={{ width: "100%", height: "100%" }}
       >
 
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
         <MapBinder />
 
-        {/* player */}
         <Marker position={[gps.lat, gps.lng]}>
           <Popup>你在這裡</Popup>
         </Marker>
 
-        {/* mushrooms */}
-        {mushrooms.map(m => (
-          <Fragment key={m.id}>
-            <Circle center={[m.lat, m.lng]} radius={40} />
+        {mushrooms.map(m => {
+          const d = getDistance(gps.lat, gps.lng, m.lat, m.lng);
 
-            <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
-              <Popup>
-                <b>{m.name}</b><br />
-                力量：{m.power}
-              </Popup>
-            </Marker>
-          </Fragment>
-        ))}
+          return (
+            <Fragment key={m.id}>
+              <Circle center={[m.lat, m.lng]} radius={40} />
+
+              <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
+                <Popup>
+                  <b>{m.name}</b>
+
+                  <hr />
+
+                  📍 {m.lat}, {m.lng}
+                  <br />
+                  距離：{Math.round(d)}m
+
+                  <hr />
+
+                  <button
+                    onClick={async () => {
+                      const text = `${m.lat},${m.lng}`;
+                      try {
+                        await navigator.clipboard.writeText(text);
+                        alert("已複製座標");
+                      } catch {
+                        prompt("複製座標", text);
+                      }
+                    }}
+                  >
+                    📋 複製座標
+                  </button>
+
+                  <br />
+
+                  <button
+                    onClick={async () => {
+                      const url = `https://www.google.com/maps?q=${m.lat},${m.lng}`;
+                      try {
+                        await navigator.clipboard.writeText(url);
+                        alert("已複製 Google Maps");
+                      } catch {
+                        prompt("複製連結", url);
+                      }
+                    }}
+                  >
+                    🧭 複製導航
+                  </button>
+                </Popup>
+              </Marker>
+            </Fragment>
+          );
+        })}
 
       </MapContainer>
     </div>
