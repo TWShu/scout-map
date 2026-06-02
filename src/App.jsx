@@ -77,7 +77,7 @@ export default function App() {
   const [batchList, setBatchList] = useState([]);
   const [batchOpen, setBatchOpen] = useState(true);
   const [batchHeight, setBatchHeight] = useState(110);
-
+const [listHeight, setListHeight] = useState(300);
   const lastRef = useRef(null);
 
   // ---------------- parse ----------------
@@ -336,31 +336,128 @@ export default function App() {
 
       {/* 🧠 這個就是你消失的「菇點視窗」已修復 */}
       <div style={{
-        position: "fixed",
-        top: 330,
-        right: 10,
-        zIndex: 999999,
-        background: "white",
-        padding: 10,
-        width: 220,
-        maxHeight: 300,
-        overflowY: "auto"
-      }}>
-        <b>🍄 菇點列表</b>
+      <div
+  style={{
+    position: "fixed",
+    top: 330,
+    right: 10,
+    zIndex: 999999,
+    background: "white",
+    padding: 10,
+    width: 220,
+    borderRadius: 8,
+    boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+  }}
+>
+  <b>🍄 菇點列表 ({mushrooms.length})</b>
 
-        {mushrooms.map(m => (
-          <div
-            key={m.id}
-            onClick={() => moveTo(m.lat, m.lng)}
-            style={{ cursor: "pointer", marginTop: 8 }}
-          >
-            {m.name}
-            <div style={{ fontSize: 12 }}>
-              {m.lat}, {m.lng}
-            </div>
+  <div
+    style={{
+      height: listHeight,
+      overflowY: "auto",
+      marginTop: 8
+    }}
+  >
+    {mushrooms.map((m) => {
+
+      const distance = gps
+        ? Math.round(
+            getDistance(
+              gps.lat,
+              gps.lng,
+              Number(m.lat),
+              Number(m.lng)
+            )
+          )
+        : 0;
+
+      return (
+        <div
+          key={m.id}
+          onClick={() => moveTo(m.lat, m.lng)}
+          style={{
+            cursor: "pointer",
+            marginTop: 8,
+            borderBottom: "1px solid #ddd",
+            paddingBottom: 6
+          }}
+        >
+          <div>
+            🍄 {m.name}
           </div>
-        ))}
-      </div>
+
+          <div
+            style={{
+              fontSize: 12,
+              color: "#666"
+            }}
+          >
+            📏 {distance}m
+          </div>
+
+          <div
+            style={{
+              fontSize: 11,
+              color: "#999"
+            }}
+          >
+            {m.lat}, {m.lng}
+          </div>
+        </div>
+      );
+    })}
+  </div>
+
+  {/* 高度縮放條 */}
+  <div
+    onMouseDown={(e) => {
+      const startY = e.clientY;
+      const startHeight = listHeight;
+
+      const move = (ev) => {
+        setListHeight(
+          Math.max(
+            120,
+            Math.min(
+              700,
+              startHeight +
+                (ev.clientY - startY)
+            )
+          )
+        );
+      };
+
+      const up = () => {
+        window.removeEventListener(
+          "mousemove",
+          move
+        );
+
+        window.removeEventListener(
+          "mouseup",
+          up
+        );
+      };
+
+      window.addEventListener(
+        "mousemove",
+        move
+      );
+
+      window.addEventListener(
+        "mouseup",
+        up
+      );
+    }}
+    style={{
+      marginTop: 8,
+      height: 8,
+      background: "#999",
+      borderRadius: 4,
+      cursor: "row-resize"
+    }}
+  />
+</div>
 
       {/* MAP */}
       <MapContainer
