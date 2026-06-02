@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -121,57 +121,69 @@ export default function App() {
     return null;
   }
 
-  // ---------------- MAP BINDER ----------------
   function MapBinder() {
     const map = useMap();
-
     useEffect(() => {
       mapRef.current = map;
     }, [map]);
-
     return null;
   }
 
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
 
-      {/* ================= 回到我 ================= */}
-      <button
-        onClick={returnToMe}
-        style={{
-          position: "absolute",
-          bottom: 20,
-          right: 20,
-          zIndex: 9999
-        }}
-      >
-        🎯 回到我
-      </button>
-
-      {/* ================= 新增菇 ================= */}
-      <button
-        onClick={() => setAddMode(v => !v)}
-        style={{
-          position: "absolute",
-          bottom: 60,
-          right: 20,
-          zIndex: 9999
-        }}
-      >
-        {addMode ? "🍄 新增 ON" : "🍄 新增 OFF"}
-      </button>
-
-      {/* ================= 菇點列表 ================= */}
+      {/* ================= FIXED UI LAYER ================= */}
       <div style={{
-        position: "absolute",
-        top: 20,
+        position: "fixed",
+        top: 10,
         right: 10,
-        zIndex: 9999,
+        zIndex: 999999,
+        display: "flex",
+        flexDirection: "column",
+        gap: 10
+      }}>
+
+        {/* 🎯 回到我 */}
+        <button
+          onClick={returnToMe}
+          style={{
+            padding: "10px",
+            background: "white",
+            border: "1px solid #ccc",
+            borderRadius: 8
+          }}
+        >
+          🎯 回到我
+        </button>
+
+        {/* 🍄 新增 */}
+        <button
+          onClick={() => setAddMode(v => !v)}
+          style={{
+            padding: "10px",
+            background: addMode ? "#d1ffd1" : "white",
+            border: "1px solid #ccc",
+            borderRadius: 8
+          }}
+        >
+          {addMode ? "🍄 新增 ON" : "🍄 新增 OFF"}
+        </button>
+
+      </div>
+
+      {/* ================= LIST ================= */}
+      <div style={{
+        position: "fixed",
+        top: 120,
+        right: 10,
+        zIndex: 999999,
         background: "white",
         padding: 10,
         width: 180,
         maxHeight: 300,
-        overflowY: "auto"
+        overflowY: "auto",
+        border: "1px solid #ddd",
+        borderRadius: 8
       }}>
         <b>🍄 菇點</b>
 
@@ -181,8 +193,8 @@ export default function App() {
           return (
             <div
               key={m.id}
-              style={{ marginTop: 8, cursor: "pointer" }}
               onClick={() => moveTo(m.lat, m.lng)}
+              style={{ cursor: "pointer", marginTop: 8 }}
             >
               {m.name}
               <div style={{ fontSize: 11, opacity: 0.6 }}>
@@ -204,56 +216,37 @@ export default function App() {
         <MapBinder />
         <AddMushroom />
 
-        {/* 玩家 */}
         <Marker position={[gps.lat, gps.lng]}>
           <Popup>你在這裡</Popup>
         </Marker>
 
-        {/* 菇點 */}
-        {mushrooms.map(m => {
-          const d = getDistance(gps.lat, gps.lng, m.lat, m.lng);
+        {mushrooms.map(m => (
+          <Fragment key={m.id}>
+            <Circle center={[m.lat, m.lng]} radius={40} />
 
-          return (
-            <Fragment key={m.id}>
+            <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
+              <Popup>
+                <b>{m.name}</b>
+                <br />
+                📍 {m.lat}, {m.lng}
 
-              <Circle center={[m.lat, m.lng]} radius={40} />
+                <br /><br />
 
-              <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
-                <Popup>
-
-                  <b>{m.name}</b>
-
-                  <hr />
-
-                  📍 {m.lat}, {m.lng}
-                  <br />
-                  📏 {Math.round(d)} m
-
-                  <hr />
-
-                  {/* 📋 複製座標（你要的功能） */}
-                  <button
-                    onClick={async () => {
-                      const text = `${m.lat},${m.lng}`;
-                      try {
-                        await navigator.clipboard.writeText(text);
-                        alert("已複製座標");
-                      } catch {
-                        prompt("複製座標", text);
-                      }
-                    }}
-                  >
-                    📋 複製座標
-                  </button>
-
-                </Popup>
-              </Marker>
-
-            </Fragment>
-          );
-        })}
+                <button
+                  onClick={async () => {
+                    const text = `${m.lat},${m.lng}`;
+                    await navigator.clipboard.writeText(text);
+                    alert("已複製座標");
+                  }}
+                >
+                  📋 複製座標
+                </button>
+              </Popup>
+            </Marker>
+          </Fragment>
+        ))}
 
       </MapContainer>
     </div>
   );
-            }
+}
