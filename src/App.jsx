@@ -4,7 +4,7 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
 import { db } from "./firebase";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, writeBatch } from "firebase/firestore";
 
 // ---------------- Leaflet fix ----------------
 delete L.Icon.Default.prototype._getIconUrl;
@@ -41,22 +41,21 @@ function getDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ---------------- RADAR OVERLAY ----------------
-function Radar({ radius = 120 }) {
-  return (
-    <div style={{
-      position: "absolute",
-      left: "50%",
-      top: "50%",
-      transform: "translate(-50%, -50%)",
-      width: radius * 2,
-      height: radius * 2,
-      pointerEvents: "none",
-      zIndex: 9998
-    }}>
-      <div className="radar" />
-    </div>
-  );
+// ---------------- CSV PARSER ----------------
+function parseCSV(text) {
+  const lines = text.trim().split("\n");
+  const headers = lines[0].split(",");
+
+  return lines.slice(1).map(line => {
+    const values = line.split(",");
+    const obj = {};
+
+    headers.forEach((h, i) => {
+      obj[h.trim()] = values[i]?.trim();
+    });
+
+    return obj;
+  });
 }
 
 // ---------------- MAIN APP ----------------
@@ -92,8 +91,8 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // ---------------- MOVE ENGINE (safe) ----------------
-  const moveTo = (lat, lng, zoom = 19) => {
+  // ---------------- MOVE ENGINE ----------------
+  const moveTo = (lat, lng, zoom = 18) => {
     const map = mapRef.current;
     if (!map) return;
 
@@ -105,7 +104,49 @@ export default function App() {
     moveTo(gps.lat, gps.lng, 18);
   };
 
-  // ---------------- SORT ----------------
+  // ---------------- IMPORT FUNCTION ----------------
+  const importJSON = async (file) => {
+    const text = await file.text();
+    const data = JSON.parse(text);
+
+    const batch = writeBatch(db);
+
+    data.forEach(item => {
+      const ref = doc(collection(db, "mushrooms"));
+      batch.set(ref, {
+        name: item.name,
+        lat: Number(item.lat),
+        lng: Number(item.lng),
+        power: Number(item.power || 50),
+        createdAt: new Date()
+      });
+    });
+
+    await batch.commit();
+    alert("JSON 匯入完成");
+  };
+
+  const importCSV = async (file) => {
+    const text = await file.text();
+    const data = parseCSV(text);
+
+    const batch = writeBatch(db);
+
+    data.forEach(item => {
+      const ref = doc(collection(db, "mushrooms"));
+      batch.set(ref, {
+        name: item.name,
+        lat: Number(item.lat),
+        lng: Number(item.lng),
+        power: Number(item.power || 50),
+        createdAt: new Date()
+      });
+    });
+
+    await batch.commit();
+    alert("CSV 匯入完成");
+  };
+
   const sorted = useMemo(() => {
     return [...mushrooms].sort((a, b) => {
       const da = getDistance(gps.lat, gps.lng, a.lat, a.lng);
@@ -114,7 +155,6 @@ export default function App() {
     });
   }, [mushrooms, gps]);
 
-  // ---------------- MAP BINDER ----------------
   function MapBinder() {
     const map = useMap();
 
@@ -125,42 +165,10 @@ export default function App() {
     return null;
   }
 
-  // ---------------- nearest ----------------
-  const nearest = sorted[0];
-
   return (
-    <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
+    <div style={{ width: "100vw", height: "100vh" }}>
 
-      {/* ===== RADAR STYLE ===== */}
-      <style>{`
-        .radar {
-          width: 100%;
-          height: 100%;
-          border-radius: 50%;
-          border: 2px solid rgba(0, 255, 100, 0.5);
-          position: relative;
-          overflow: hidden;
-        }
-
-        .radar::after {
-          content: "";
-          position: absolute;
-          width: 100%;
-          height: 100%;
-          background: conic-gradient(
-            rgba(0,255,100,0.35),
-            transparent 60%
-          );
-          animation: spin 2s linear infinite;
-        }
-
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-
-      {/* HUD */}
+      {/* UI */}
       <div style={{
         position: "absolute",
         zIndex: 9999,
@@ -168,18 +176,41 @@ export default function App() {
         right: 10,
         background: "white",
         padding: 10,
-        borderRadius: 8
+        width: 200
       }}>
-        <div>🍄 {mushrooms.length}</div>
-        <div>📍 最近：{nearest?.name || "無"}</div>
-        <button onClick={returnToMe}>🎯 回到我</button>
+
+        <button onClick={returnToMe}>
+          🎯 回到我
+        </button>
+
+        <hr />
+
+        {/* IMPORT */}
+        <div>
+          <b>📥 匯入 JSON</b>
+          <input
+            type="file"
+            accept=".json"
+            onChange={(e) => importJSON(e.target.files[0])}
+          />
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <b>📥 匯入 CSV</b>
+          <input
+            type="file"
+            accept=".csv"
+            onChange={(e) => importCSV(e.target.files[0])}
+          />
+        </div>
+
       </div>
 
       {/* list */}
       <div style={{
         position: "absolute",
         zIndex: 9999,
-        top: 120,
+        top: 160,
         right: 10,
         background: "white",
         padding: 10,
@@ -189,28 +220,16 @@ export default function App() {
       }}>
         <b>🍄 菇點</b>
 
-        {sorted.map(m => {
-          const d = getDistance(gps.lat, gps.lng, m.lat, m.lng);
-
-          return (
-            <div
-              key={m.id}
-              style={{
-                cursor: "pointer",
-                marginTop: 8,
-                color: d < 50 ? "green" : d < 120 ? "orange" : "black",
-                fontWeight: d < 50 ? "bold" : "normal"
-              }}
-              onClick={() => moveTo(m.lat, m.lng, 19)}
-            >
-              {m.name} ({Math.round(d)}m)
-            </div>
-          );
-        })}
+        {sorted.map(m => (
+          <div
+            key={m.id}
+            style={{ cursor: "pointer", marginTop: 8 }}
+            onClick={() => moveTo(m.lat, m.lng, 19)}
+          >
+            {m.name}
+          </div>
+        ))}
       </div>
-
-      {/* RADAR */}
-      <Radar radius={140} />
 
       {/* MAP */}
       <MapContainer
@@ -218,6 +237,7 @@ export default function App() {
         zoom={18}
         style={{ width: "100%", height: "100%" }}
       >
+
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
@@ -232,18 +252,13 @@ export default function App() {
         {/* mushrooms */}
         {mushrooms.map(m => (
           <Fragment key={m.id}>
-            <Circle
-              center={[m.lat, m.lng]}
-              radius={40}
-              pathOptions={{
-                color: getDistance(gps.lat, gps.lng, m.lat, m.lng) < 50
-                  ? "green"
-                  : "orange"
-              }}
-            />
+            <Circle center={[m.lat, m.lng]} radius={40} />
 
             <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
-              <Popup>{m.name}</Popup>
+              <Popup>
+                <b>{m.name}</b><br />
+                力量：{m.power}
+              </Popup>
             </Marker>
           </Fragment>
         ))}
