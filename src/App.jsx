@@ -80,7 +80,7 @@ export default function App() {
 
   const mapRef = useRef(null);
 
-  const [gps, setGps] = useState(null);   // ⭐ 不給預設值
+  const [gps, setGps] = useState(null);
   const [ready, setReady] = useState(false);
 
   const [mushrooms, setMushrooms] = useState([]);
@@ -90,50 +90,46 @@ export default function App() {
 
   const lastRef = useRef(null);
 
+  // ---------------- INPUT ----------------
+  const [latInput, setLatInput] = useState("");
+  const [lngInput, setLngInput] = useState("");
+
   // ---------------- GPS ----------------
   useEffect(() => {
     if (!navigator.geolocation) return;
 
-    const id = navigator.geolocation.watchPosition(
-      (pos) => {
-        const next = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude
-        };
+    const id = navigator.geolocation.watchPosition((pos) => {
+      const next = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude
+      };
 
-        setGps(next);
-        setReady(true);
+      setGps(next);
+      setReady(true);
 
-        const map = mapRef.current;
-        if (!map) return;
+      const map = mapRef.current;
+      if (!map) return;
 
-        if (followMode === "GPS") {
-          map.setView(next);
-        }
-
-        if (followMode === "SMART") {
-          const last = lastRef.current;
-
-          if (!last) {
-            lastRef.current = next;
-            return;
-          }
-
-          const d = getDistance(last.lat, last.lng, next.lat, next.lng);
-
-          if (d > 30) {
-            map.setView(next);
-            lastRef.current = next;
-          }
-        }
-      },
-      (err) => console.error("GPS error", err),
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 1000
+      if (followMode === "GPS") {
+        map.setView(next);
       }
-    );
+
+      if (followMode === "SMART") {
+        const last = lastRef.current;
+
+        if (!last) {
+          lastRef.current = next;
+          return;
+        }
+
+        const d = getDistance(last.lat, last.lng, next.lat, next.lng);
+
+        if (d > 30) {
+          map.setView(next);
+          lastRef.current = next;
+        }
+      }
+    });
 
     return () => navigator.geolocation.clearWatch(id);
   }, [followMode]);
@@ -205,6 +201,38 @@ export default function App() {
     return null;
   }
 
+  // ---------------- INPUT ACTIONS ----------------
+  const goToInput = () => {
+    const lat = parseFloat(latInput);
+    const lng = parseFloat(lngInput);
+
+    if (isNaN(lat) || isNaN(lng)) {
+      alert("座標錯誤");
+      return;
+    }
+
+    moveTo(lat, lng);
+  };
+
+  const createFromInput = async () => {
+    const lat = parseFloat(latInput);
+    const lng = parseFloat(lngInput);
+
+    if (isNaN(lat) || isNaN(lng)) {
+      alert("座標錯誤");
+      return;
+    }
+
+    const name = prompt("菇點名稱");
+    if (!name) return;
+
+    await addDoc(collection(db, "mushrooms"), {
+      name,
+      lat,
+      lng
+    });
+  };
+
   // ---------------- LOADING ----------------
   if (!ready || !gps) {
     return (
@@ -213,10 +241,9 @@ export default function App() {
         height: "100vh",
         display: "flex",
         alignItems: "center",
-        justifyContent: "center",
-        fontSize: 18
+        justifyContent: "center"
       }}>
-        📡 正在取得 GPS 位置...
+        📡 正在取得 GPS...
       </div>
     );
   }
@@ -232,7 +259,7 @@ export default function App() {
         zIndex: 999999,
         display: "flex",
         flexDirection: "column",
-        gap: 8
+        gap: 6
       }}>
 
         <button onClick={returnToMe}>🎯 回到我</button>
@@ -251,12 +278,32 @@ export default function App() {
           跟隨：{followMode}
         </button>
 
+        {/* ===== INPUT ===== */}
+        <div style={{ background: "#eee", padding: 6 }}>
+          <input
+            placeholder="lat"
+            value={latInput}
+            onChange={(e) => setLatInput(e.target.value)}
+            style={{ width: "100%", marginBottom: 4 }}
+          />
+
+          <input
+            placeholder="lng"
+            value={lngInput}
+            onChange={(e) => setLngInput(e.target.value)}
+            style={{ width: "100%" }}
+          />
+
+          <button onClick={goToInput}>🧭 移動</button>
+          <button onClick={createFromInput}>🍄 建立菇點</button>
+        </div>
+
       </div>
 
       {/* ================= NAV ================= */}
       <div style={{
         position: "fixed",
-        top: 120,
+        top: 200,
         right: 10,
         zIndex: 999999,
         background: "white",
@@ -363,4 +410,4 @@ export default function App() {
       </MapContainer>
     </div>
   );
-}
+                           }
