@@ -1,5 +1,14 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap, useMapEvents } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  Circle,
+  useMap,
+  useMapEvents
+} from "react-leaflet";
+
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
@@ -42,28 +51,6 @@ function getDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ---------------- label icon ----------------
-const labelIcon = (text, color) =>
-  L.divIcon({
-    className: "",
-    html: `
-      <div style="
-        background:white;
-        padding:2px 6px;
-        border-radius:6px;
-        font-size:12px;
-        font-weight:bold;
-        color:${color};
-        border:1px solid #ddd;
-        white-space:nowrap;
-      ">
-        ${text}
-      </div>
-    `,
-    iconSize: [60, 20],
-    iconAnchor: [30, 10]
-  });
-
 // ---------------- MAIN ----------------
 export default function App() {
 
@@ -77,7 +64,6 @@ export default function App() {
   const [mushrooms, setMushrooms] = useState([]);
 
   const [addMode, setAddMode] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
 
   // ---------------- GPS ----------------
   useEffect(() => {
@@ -149,56 +135,36 @@ export default function App() {
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
 
-      {/* ================= CONTROL ================= */}
-
+      {/* ================= 回到我 ================= */}
       <button
         onClick={returnToMe}
-        style={{ position: "absolute", bottom: 20, right: 20, zIndex: 9999 }}
+        style={{
+          position: "absolute",
+          bottom: 20,
+          right: 20,
+          zIndex: 9999
+        }}
       >
         🎯 回到我
       </button>
 
+      {/* ================= 新增菇 ================= */}
       <button
         onClick={() => setAddMode(v => !v)}
-        style={{ position: "absolute", bottom: 60, right: 20, zIndex: 9999 }}
+        style={{
+          position: "absolute",
+          bottom: 60,
+          right: 20,
+          zIndex: 9999
+        }}
       >
         {addMode ? "🍄 新增 ON" : "🍄 新增 OFF"}
       </button>
 
-      {/* ================= IMPORT BOX（已修復）================= */}
+      {/* ================= 菇點列表 ================= */}
       <div style={{
         position: "absolute",
-        top: 10,
-        right: 10,
-        zIndex: 9999,
-        background: "white",
-        borderRadius: 10,
-        padding: 10,
-        width: importOpen ? 220 : 60,
-        transition: "0.2s",
-        overflow: "hidden"
-      }}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <b>📥</b>
-          <button onClick={() => setImportOpen(v => !v)}>
-            {importOpen ? "−" : "+"}
-          </button>
-        </div>
-
-        {importOpen && (
-          <div style={{ marginTop: 10 }}>
-            <div>📌 匯入功能區</div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>
-              （CSV / JSON 可接）
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ================= LIST ================= */}
-      <div style={{
-        position: "absolute",
-        top: 120,
+        top: 20,
         right: 10,
         zIndex: 9999,
         background: "white",
@@ -215,8 +181,8 @@ export default function App() {
           return (
             <div
               key={m.id}
+              style={{ marginTop: 8, cursor: "pointer" }}
               onClick={() => moveTo(m.lat, m.lng)}
-              style={{ cursor: "pointer", marginTop: 8 }}
             >
               {m.name}
               <div style={{ fontSize: 11, opacity: 0.6 }}>
@@ -247,11 +213,6 @@ export default function App() {
         {mushrooms.map(m => {
           const d = getDistance(gps.lat, gps.lng, m.lat, m.lng);
 
-          const color =
-            d < 50 ? "green" :
-            d < 120 ? "orange" :
-            "black";
-
           return (
             <Fragment key={m.id}>
 
@@ -259,19 +220,34 @@ export default function App() {
 
               <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
                 <Popup>
+
                   <b>{m.name}</b>
-                  <br />
+
+                  <hr />
+
                   📍 {m.lat}, {m.lng}
                   <br />
                   📏 {Math.round(d)} m
+
+                  <hr />
+
+                  {/* 📋 複製座標（你要的功能） */}
+                  <button
+                    onClick={async () => {
+                      const text = `${m.lat},${m.lng}`;
+                      try {
+                        await navigator.clipboard.writeText(text);
+                        alert("已複製座標");
+                      } catch {
+                        prompt("複製座標", text);
+                      }
+                    }}
+                  >
+                    📋 複製座標
+                  </button>
+
                 </Popup>
               </Marker>
-
-              <Marker
-                position={[m.lat, m.lng]}
-                icon={labelIcon(`${Math.round(d)}m`, color)}
-                interactive={false}
-              />
 
             </Fragment>
           );
@@ -280,4 +256,4 @@ export default function App() {
       </MapContainer>
     </div>
   );
-                               }
+            }
