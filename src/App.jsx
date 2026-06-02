@@ -90,9 +90,22 @@ export default function App() {
 
   const lastRef = useRef(null);
 
-  // ---------------- INPUT ----------------
-  const [latInput, setLatInput] = useState("");
-  const [lngInput, setLngInput] = useState("");
+  // 📍 單輸入
+  const [coordInput, setCoordInput] = useState("");
+
+  // ---------------- parse lat,lng ----------------
+  const parseCoord = (text) => {
+    const match = text.trim().match(
+      /(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/
+    );
+
+    if (!match) return null;
+
+    return {
+      lat: parseFloat(match[1]),
+      lng: parseFloat(match[2])
+    };
+  };
 
   // ---------------- GPS ----------------
   useEffect(() => {
@@ -201,35 +214,25 @@ export default function App() {
     return null;
   }
 
-  // ---------------- INPUT ACTIONS ----------------
+  // ---------------- INPUT ACTION ----------------
   const goToInput = () => {
-    const lat = parseFloat(latInput);
-    const lng = parseFloat(lngInput);
+    const result = parseCoord(coordInput);
+    if (!result) return alert("格式錯誤");
 
-    if (isNaN(lat) || isNaN(lng)) {
-      alert("座標錯誤");
-      return;
-    }
-
-    moveTo(lat, lng);
+    moveTo(result.lat, result.lng);
   };
 
   const createFromInput = async () => {
-    const lat = parseFloat(latInput);
-    const lng = parseFloat(lngInput);
-
-    if (isNaN(lat) || isNaN(lng)) {
-      alert("座標錯誤");
-      return;
-    }
+    const result = parseCoord(coordInput);
+    if (!result) return alert("格式錯誤");
 
     const name = prompt("菇點名稱");
     if (!name) return;
 
     await addDoc(collection(db, "mushrooms"), {
       name,
-      lat,
-      lng
+      lat: result.lat,
+      lng: result.lng
     });
   };
 
@@ -278,24 +281,17 @@ export default function App() {
           跟隨：{followMode}
         </button>
 
-        {/* ===== INPUT ===== */}
+        {/* 📍 INPUT */}
         <div style={{ background: "#eee", padding: 6 }}>
           <input
-            placeholder="lat"
-            value={latInput}
-            onChange={(e) => setLatInput(e.target.value)}
-            style={{ width: "100%", marginBottom: 4 }}
-          />
-
-          <input
-            placeholder="lng"
-            value={lngInput}
-            onChange={(e) => setLngInput(e.target.value)}
+            placeholder="lat,lng"
+            value={coordInput}
+            onChange={(e) => setCoordInput(e.target.value)}
             style={{ width: "100%" }}
           />
 
           <button onClick={goToInput}>🧭 移動</button>
-          <button onClick={createFromInput}>🍄 建立菇點</button>
+          <button onClick={createFromInput}>🍄 建立</button>
         </div>
 
       </div>
@@ -303,7 +299,7 @@ export default function App() {
       {/* ================= NAV ================= */}
       <div style={{
         position: "fixed",
-        top: 200,
+        top: 220,
         right: 10,
         zIndex: 999999,
         background: "white",
@@ -340,74 +336,4 @@ export default function App() {
         style={{ width: "100%", height: "100%" }}
       >
 
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-
-        <MapBinder />
-        <AddMushroom />
-
-        {/* 玩家 */}
-        <Marker position={[gps.lat, gps.lng]}>
-          <Popup>你在這裡</Popup>
-        </Marker>
-
-        {/* 菇點 */}
-        {mushrooms.map(m => {
-          const d = getDistance(gps.lat, gps.lng, m.lat, m.lng);
-
-          return (
-            <Fragment key={m.id}>
-
-              <Circle center={[m.lat, m.lng]} radius={40} />
-
-              <Marker
-                position={[m.lat, m.lng]}
-                icon={mushroomIcon}
-                draggable
-                eventHandlers={{
-                  dragend: (e) => {
-                    const p = e.target.getLatLng();
-                    updatePosition(m.id, p.lat, p.lng);
-                  }
-                }}
-              >
-                <Popup>
-
-                  <b>{m.name}</b>
-                  <hr />
-
-                  📍 {m.lat}, {m.lng}
-                  <br />
-                  📏 {Math.round(d)} m
-
-                  <hr />
-
-                  <button onClick={() => updateName(m.id, m.name)}>
-                    ✏️ 修改名稱
-                  </button>
-
-                  <button onClick={() => deleteMushroom(m.id)}>
-                    ❌ 刪除
-                  </button>
-
-                  <br /><br />
-
-                  <button
-                    onClick={() =>
-                      navigator.clipboard.writeText(`${m.lat},${m.lng}`)
-                    }
-                  >
-                    📋 複製座標
-                  </button>
-
-                </Popup>
-
-              </Marker>
-
-            </Fragment>
-          );
-        })}
-
-      </MapContainer>
-    </div>
-  );
-                           }
+        <TileLayer url="https://{s}.
