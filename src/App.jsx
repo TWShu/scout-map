@@ -57,7 +57,27 @@ function getDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ---------------- APP ----------------
+// ---------------- MAP CLICK ADD (修復重點) ----------------
+function MapAddHandler({ addMode }) {
+  useMapEvents({
+    async click(e) {
+      if (!addMode) return;
+
+      const name = prompt("菇點名稱");
+      if (!name) return;
+
+      await addDoc(collection(db, "mushrooms"), {
+        name,
+        lat: e.latlng.lat,
+        lng: e.latlng.lng
+      });
+    }
+  });
+
+  return null;
+}
+
+// ---------------- MAIN ----------------
 export default function App() {
 
   const mapRef = useRef(null);
@@ -174,28 +194,15 @@ export default function App() {
     });
   };
 
-  // ---------------- ADD ----------------
-  function AddMushroom() {
-    useMapEvents({
-      async click(e) {
-        if (!addMode) return;
-
-        const name = prompt("菇點名稱");
-        if (!name) return;
-
-        await addDoc(collection(db, "mushrooms"), {
-          name,
-          lat: e.latlng.lat,
-          lng: e.latlng.lng
-        });
-      }
-    });
-    return null;
-  }
-
+  // ---------------- loading ----------------
   if (!ready || !gps) {
     return (
-      <div style={{ display: "flex", height: "100vh", justifyContent: "center", alignItems: "center" }}>
+      <div style={{
+        display: "flex",
+        height: "100vh",
+        justifyContent: "center",
+        alignItems: "center"
+      }}>
         📡 GPS loading...
       </div>
     );
@@ -207,19 +214,17 @@ export default function App() {
     <div style={{ width: "100vw", height: "100vh" }}>
 
       {/* ================= SIDEBAR ================= */}
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          height: "100vh",
-          width: sidebarActualWidth,
-          background: "#1e1e1e",
-          color: "white",
-          zIndex: 999999,
-          overflow: "hidden"
-        }}
-      >
+      <div style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        height: "100vh",
+        width: sidebarActualWidth,
+        background: "#1e1e1e",
+        color: "white",
+        zIndex: 999999,
+        overflow: "hidden"
+      }}>
 
         <div
           onClick={() => setSidebarOpen(v => !v)}
@@ -236,32 +241,28 @@ export default function App() {
 
         <div style={{ padding: 10 }}>
 
-          {/* GPS */}
-          <div>
-            <b>📍 GPS</b>
-            <div style={{ fontSize: 12 }}>
-              {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}
-            </div>
-
-            <button onClick={returnToMe} style={{ width: "100%", marginTop: 5 }}>
-              🎯 回到我
-            </button>
-
-            <button
-              onClick={() =>
-                setFollowMode(m =>
-                  m === "OFF" ? "GPS" :
-                  m === "GPS" ? "SMART" :
-                  "OFF"
-                )
-              }
-              style={{ width: "100%", marginTop: 5 }}
-            >
-              跟隨：{followMode}
-            </button>
+          <b>📍 GPS</b>
+          <div style={{ fontSize: 12 }}>
+            {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}
           </div>
 
-          {/* TOOL */}
+          <button onClick={returnToMe} style={{ width: "100%", marginTop: 5 }}>
+            🎯 回到我
+          </button>
+
+          <button
+            onClick={() =>
+              setFollowMode(m =>
+                m === "OFF" ? "GPS" :
+                m === "GPS" ? "SMART" :
+                "OFF"
+              )
+            }
+            style={{ width: "100%", marginTop: 5 }}
+          >
+            跟隨：{followMode}
+          </button>
+
           <div style={{ marginTop: 10 }}>
             <b>🧰 工具</b>
 
@@ -280,23 +281,25 @@ export default function App() {
               🍄 新增
             </button>
 
-            <button onClick={() => setAddMode(v => !v)} style={{ width: "100%", marginTop: 5 }}>
+            <button
+              onClick={() => setAddMode(v => !v)}
+              style={{ width: "100%", marginTop: 5 }}
+            >
               {addMode ? "新增ON" : "新增OFF"}
             </button>
           </div>
 
-          {/* LIST */}
           <div style={{ marginTop: 10 }}>
-            <b>🍄 菇點 ({mushrooms.length})</b>
+            <b>🍄 菇點</b>
 
             <div
               style={{
                 height: panelHeight,
                 overflowY: "auto",
-                fontSize: 12,
                 background: "#2a2a2a",
                 padding: 5,
-                marginTop: 5
+                marginTop: 5,
+                fontSize: 12
               }}
             >
               {mushrooms.map(m => (
@@ -350,7 +353,9 @@ export default function App() {
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
         <MapBinder />
-        <AddMushroom />
+
+        {/* ⭐ 這行就是修復點地圖新增 */}
+        <MapAddHandler addMode={addMode} />
 
         <Marker position={[gps.lat, gps.lng]}>
           <Popup>你在這裡</Popup>
@@ -363,9 +368,7 @@ export default function App() {
             <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
               <Popup>
                 <b>🍄 {m.name}</b>
-
                 <hr />
-
                 📍 {m.lat.toFixed(5)}, {m.lng.toFixed(5)}
 
                 <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
@@ -403,4 +406,4 @@ export default function App() {
       </MapContainer>
     </div>
   );
-}
+      }
