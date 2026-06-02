@@ -1,10 +1,19 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  Circle,
+  useMap,
+  useMapEvents
+} from "react-leaflet";
+
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
 import { db } from "./firebase";
-import { collection, onSnapshot, writeBatch } from "firebase/firestore";
+import { collection, onSnapshot, addDoc } from "firebase/firestore";
 
 // ---------------- Leaflet fix ----------------
 delete L.Icon.Default.prototype._getIconUrl;
@@ -18,7 +27,7 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
 
-// ---------------- icon ----------------
+// ---------------- mushroom icon ----------------
 const mushroomIcon = L.divIcon({
   html: "🍄",
   className: "",
@@ -42,20 +51,27 @@ function getDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ---------------- CSV ----------------
-function parseCSV(text) {
-  const lines = text.trim().split("\n");
-  const headers = lines[0].split(",");
-
-  return lines.slice(1).map(line => {
-    const values = line.split(",");
-    const obj = {};
-    headers.forEach((h, i) => {
-      obj[h.trim()] = values[i]?.trim();
-    });
-    return obj;
+// ---------------- label icon（距離顯示）----------------
+const labelIcon = (text, color) =>
+  L.divIcon({
+    className: "",
+    html: `
+      <div style="
+        background: white;
+        padding: 2px 6px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: bold;
+        color: ${color};
+        border: 1px solid #ddd;
+        white-space: nowrap;
+      ">
+        ${text}
+      </div>
+    `,
+    iconSize: [60, 20],
+    iconAnchor: [30, 10]
   });
-}
 
 // ---------------- MAIN APP ----------------
 export default function App() {
@@ -68,7 +84,9 @@ export default function App() {
   });
 
   const [mushrooms, setMushrooms] = useState([]);
-  const [panelOpen, setPanelOpen] = useState(true);
+
+  const [addMode, setAddMode] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   // ---------------- GPS ----------------
   useEffect(() => {
@@ -106,54 +124,27 @@ export default function App() {
     moveTo(gps.lat, gps.lng, 18);
   };
 
-  // ---------------- IMPORT ----------------
-  const importJSON = async (file) => {
-    const text = await file.text();
-    const data = JSON.parse(text);
+  // ---------------- ADD MODE ----------------
+  function AddMushroom() {
+    useMapEvents({
+      async click(e) {
+        if (!addMode) return;
 
-    const batch = writeBatch(db);
+        const name = window.prompt("菇點名稱", "新菇點");
+        if (!name) return;
 
-    data.forEach(item => {
-      const ref = doc(collection(db, "mushrooms"));
-      batch.set(ref, {
-        name: item.name,
-        lat: Number(item.lat),
-        lng: Number(item.lng)
-      });
+        await addDoc(collection(db, "mushrooms"), {
+          name,
+          lat: e.latlng.lat,
+          lng: e.latlng.lng
+        });
+      }
     });
 
-    await batch.commit();
-    alert("JSON 匯入完成");
-  };
+    return null;
+  }
 
-  const importCSV = async (file) => {
-    const text = await file.text();
-    const data = parseCSV(text);
-
-    const batch = writeBatch(db);
-
-    data.forEach(item => {
-      const ref = doc(collection(db, "mushrooms"));
-      batch.set(ref, {
-        name: item.name,
-        lat: Number(item.lat),
-        lng: Number(item.lng)
-      });
-    });
-
-    await batch.commit();
-    alert("CSV 匯入完成");
-  };
-
-  // ---------------- SORT ----------------
-  const sorted = useMemo(() => {
-    return [...mushrooms].sort((a, b) => {
-      const da = getDistance(gps.lat, gps.lng, a.lat, a.lng);
-      const db = getDistance(gps.lat, gps.lng, b.lat, b.lng);
-      return da - db;
-    });
-  }, [mushrooms, gps]);
-
+  // ---------------- MAP BINDER ----------------
   function MapBinder() {
     const map = useMap();
 
@@ -167,101 +158,85 @@ export default function App() {
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
 
-      {/* ===== IMPORT PANEL ===== */}
+      {/* ================= BUTTONS ================= */}
+
+      <button
+        onClick={returnToMe}
+        style={{ position: "absolute", bottom: 20, right: 20, zIndex: 9999 }}
+      >
+        🎯 回到我
+      </button>
+
+      <button
+        onClick={() => setAddMode(v => !v)}
+        style={{ position: "absolute", bottom: 60, right: 20, zIndex: 9999 }}
+      >
+        {addMode ? "🍄 新增 ON" : "🍄 新增 OFF"}
+      </button>
+
       <div style={{
         position: "absolute",
         top: 10,
         right: 10,
         zIndex: 9999,
         background: "white",
-        borderRadius: 10,
-        width: panelOpen ? 240 : 60,
         padding: 10,
-        overflow: "hidden",
-        transition: "0.2s"
+        borderRadius: 10
       }}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <b>📥 匯入</b>
-          <button onClick={() => setPanelOpen(v => !v)}>
-            {panelOpen ? "−" : "+"}
-          </button>
-        </div>
+        <button onClick={() => setImportOpen(v => !v)}>
+          📥 匯入
+        </button>
 
-        {panelOpen && (
-          <>
-            <div style={{ marginTop: 10 }}>
-              JSON
-              <input type="file" accept=".json" onChange={(e) => importJSON(e.target.files[0])} />
-            </div>
-
-            <div style={{ marginTop: 10 }}>
-              CSV
-              <input type="file" accept=".csv" onChange={(e) => importCSV(e.target.files[0])} />
-            </div>
-
-            <button style={{ marginTop: 10 }} onClick={returnToMe}>
-              🎯 回到我
-            </button>
-          </>
+        {importOpen && (
+          <div style={{ marginTop: 10 }}>
+            <div>（可接 CSV / JSON 匯入）</div>
+          </div>
         )}
       </div>
 
-      {/* LIST */}
-      <div style={{
-        position: "absolute",
-        top: 140,
-        right: 10,
-        zIndex: 9999,
-        background: "white",
-        padding: 10,
-        width: 180,
-        maxHeight: 300,
-        overflowY: "auto"
-      }}>
-        <b>🍄 菇點</b>
-
-        {sorted.map(m => (
-          <div
-            key={m.id}
-            style={{ cursor: "pointer", marginTop: 8 }}
-            onClick={() => moveTo(m.lat, m.lng, 19)}
-          >
-            {m.name}
-          </div>
-        ))}
-      </div>
-
-      {/* MAP */}
+      {/* ================= MAP ================= */}
       <MapContainer
         center={[gps.lat, gps.lng]}
         zoom={18}
         style={{ width: "100%", height: "100%" }}
       >
-
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
         <MapBinder />
+        <AddMushroom />
 
+        {/* 玩家 */}
         <Marker position={[gps.lat, gps.lng]}>
           <Popup>你在這裡</Popup>
         </Marker>
 
+        {/* 菇點 */}
         {mushrooms.map(m => {
           const d = getDistance(gps.lat, gps.lng, m.lat, m.lng);
 
+          const color =
+            d < 50 ? "green" :
+            d < 120 ? "orange" :
+            "black";
+
           return (
             <Fragment key={m.id}>
+
+              {/* 範圍圈 */}
               <Circle center={[m.lat, m.lng]} radius={40} />
 
-              <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
+              {/* 🍄 菇 */}
+              <Marker
+                position={[m.lat, m.lng]}
+                icon={mushroomIcon}
+              >
                 <Popup>
                   <b>{m.name}</b>
-
                   <hr />
 
                   📍 {m.lat}, {m.lng}
                   <br />
-                  距離：{Math.round(d)}m
+                  📏 {Math.round(d)} m
 
                   <hr />
 
@@ -283,19 +258,29 @@ export default function App() {
 
                   <button
                     onClick={async () => {
-                      const url = `https://www.google.com/maps?q=${m.lat},${m.lng}`;
+                      const url =
+                        `https://www.google.com/maps?q=${m.lat},${m.lng}`;
+
                       try {
                         await navigator.clipboard.writeText(url);
-                        alert("已複製 Google Maps");
+                        alert("已複製導航");
                       } catch {
                         prompt("複製連結", url);
                       }
                     }}
                   >
-                    🧭 複製導航
+                    🧭 複製 Google Maps
                   </button>
                 </Popup>
               </Marker>
+
+              {/* 📍 永久距離標籤 */}
+              <Marker
+                position={[m.lat, m.lng]}
+                icon={labelIcon(`${Math.round(d)}m`, color)}
+                interactive={false}
+              />
+
             </Fragment>
           );
         })}
@@ -303,4 +288,4 @@ export default function App() {
       </MapContainer>
     </div>
   );
-        }
+}
