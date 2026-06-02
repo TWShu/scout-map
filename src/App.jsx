@@ -63,7 +63,6 @@ function getDistance(lat1, lng1, lat2, lng2) {
 function getArrow(lat1, lng1, lat2, lng2) {
   const dx = lng2 - lng1;
   const dy = lat2 - lat1;
-
   const angle = Math.atan2(dy, dx) * 180 / Math.PI;
 
   if (angle >= -22.5 && angle < 22.5) return "➡️";
@@ -81,52 +80,60 @@ export default function App() {
 
   const mapRef = useRef(null);
 
-  const [gps, setGps] = useState({
-    lat: 25.033964,
-    lng: 121.564468
-  });
+  const [gps, setGps] = useState(null);   // ⭐ 不給預設值
+  const [ready, setReady] = useState(false);
 
   const [mushrooms, setMushrooms] = useState([]);
 
   const [addMode, setAddMode] = useState(false);
-
   const [followMode, setFollowMode] = useState("SMART");
 
   const lastRef = useRef(null);
 
   // ---------------- GPS ----------------
   useEffect(() => {
-    const id = navigator.geolocation.watchPosition((pos) => {
-      const next = {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude
-      };
+    if (!navigator.geolocation) return;
 
-      setGps(next);
+    const id = navigator.geolocation.watchPosition(
+      (pos) => {
+        const next = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude
+        };
 
-      const map = mapRef.current;
-      if (!map) return;
+        setGps(next);
+        setReady(true);
 
-      if (followMode === "GPS") {
-        map.setView(next);
-      }
+        const map = mapRef.current;
+        if (!map) return;
 
-      if (followMode === "SMART") {
-        const last = lastRef.current;
-
-        if (!last) {
-          lastRef.current = next;
-          return;
-        }
-
-        const d = getDistance(last.lat, last.lng, next.lat, next.lng);
-
-        if (d > 30) {
+        if (followMode === "GPS") {
           map.setView(next);
-          lastRef.current = next;
         }
+
+        if (followMode === "SMART") {
+          const last = lastRef.current;
+
+          if (!last) {
+            lastRef.current = next;
+            return;
+          }
+
+          const d = getDistance(last.lat, last.lng, next.lat, next.lng);
+
+          if (d > 30) {
+            map.setView(next);
+            lastRef.current = next;
+          }
+        }
+      },
+      (err) => console.error("GPS error", err),
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 1000
       }
-    });
+    );
 
     return () => navigator.geolocation.clearWatch(id);
   }, [followMode]);
@@ -165,6 +172,7 @@ export default function App() {
   };
 
   const returnToMe = () => {
+    if (!gps) return;
     moveTo(gps.lat, gps.lng);
     setFollowMode("GPS");
   };
@@ -195,6 +203,22 @@ export default function App() {
       mapRef.current = map;
     }, [map]);
     return null;
+  }
+
+  // ---------------- LOADING ----------------
+  if (!ready || !gps) {
+    return (
+      <div style={{
+        width: "100vw",
+        height: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 18
+      }}>
+        📡 正在取得 GPS 位置...
+      </div>
+    );
   }
 
   return (
@@ -229,7 +253,7 @@ export default function App() {
 
       </div>
 
-      {/* ================= NAV LIST ================= */}
+      {/* ================= NAV ================= */}
       <div style={{
         position: "fixed",
         top: 120,
@@ -321,10 +345,9 @@ export default function App() {
                   <br /><br />
 
                   <button
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(`${m.lat},${m.lng}`);
-                      alert("已複製座標");
-                    }}
+                    onClick={() =>
+                      navigator.clipboard.writeText(`${m.lat},${m.lng}`)
+                    }
                   >
                     📋 複製座標
                   </button>
