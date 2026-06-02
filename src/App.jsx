@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -11,6 +11,7 @@ import {
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
+
 import { db } from "./firebase";
 import { collection, onSnapshot, addDoc } from "firebase/firestore";
 
@@ -37,6 +38,7 @@ const mushroomIcon = L.divIcon({
 // ---------------- distance ----------------
 function getDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
+
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
 
@@ -49,7 +51,7 @@ function getDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ---------------- direction arrow ----------------
+// ---------------- direction ----------------
 function getDirectionArrow(lat1, lng1, lat2, lng2) {
   const dx = lng2 - lng1;
   const dy = lat2 - lat1;
@@ -66,7 +68,7 @@ function getDirectionArrow(lat1, lng1, lat2, lng2) {
   return "⬅️";
 }
 
-// ---------------- MAIN ----------------
+// ---------------- MAIN APP ----------------
 export default function App() {
 
   const mapRef = useRef(null);
@@ -80,11 +82,10 @@ export default function App() {
 
   const [addMode, setAddMode] = useState(false);
 
-  // 🔥 多跟隨模式
-  const [followMode, setFollowMode] = useState("SMART"); 
   // OFF / GPS / SMART
+  const [followMode, setFollowMode] = useState("SMART");
 
-  const lastCenterRef = useRef(null);
+  const lastRef = useRef(null);
 
   // ---------------- GPS ----------------
   useEffect(() => {
@@ -97,27 +98,27 @@ export default function App() {
       setGps(next);
 
       const map = mapRef.current;
-
       if (!map) return;
 
+      // GPS 跟隨
       if (followMode === "GPS") {
         map.setView(next);
       }
 
+      // SMART 跟隨（避免亂跳）
       if (followMode === "SMART") {
-        const last = lastCenterRef.current;
+        const last = lastRef.current;
 
         if (!last) {
-          lastCenterRef.current = next;
+          lastRef.current = next;
           return;
         }
 
         const d = getDistance(last.lat, last.lng, next.lat, next.lng);
 
-        // 超過 30m 才跟
         if (d > 30) {
           map.setView(next);
-          lastCenterRef.current = next;
+          lastRef.current = next;
         }
       }
     });
@@ -203,9 +204,10 @@ export default function App() {
         }>
           跟隨：{followMode}
         </button>
+
       </div>
 
-      {/* ================= LIST + ARROW ================= */}
+      {/* ================= LIST ================= */}
       <div style={{
         position: "fixed",
         top: 120,
@@ -213,7 +215,7 @@ export default function App() {
         zIndex: 999999,
         background: "white",
         padding: 10,
-        width: 200,
+        width: 220,
         maxHeight: 320,
         overflowY: "auto"
       }}>
@@ -254,24 +256,70 @@ export default function App() {
         <MapBinder />
         <AddMushroom />
 
+        {/* 玩家 */}
         <Marker position={[gps.lat, gps.lng]}>
           <Popup>你在這裡</Popup>
         </Marker>
 
-        {mushrooms.map(m => (
-          <Fragment key={m.id}>
-            <Circle center={[m.lat, m.lng]} radius={40} />
-            <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
-              <Popup>
-                <b>{m.name}</b>
-                <br />
-                📍 {m.lat}, {m.lng}
-              </Popup>
-            </Marker>
-          </Fragment>
-        ))}
+        {/* 菇點 */}
+        {mushrooms.map(m => {
+          const d = getDistance(gps.lat, gps.lng, m.lat, m.lng);
+
+          return (
+            <Fragment key={m.id}>
+
+              <Circle center={[m.lat, m.lng]} radius={40} />
+
+              <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
+                <Popup>
+
+                  <b>{m.name}</b>
+                  <hr />
+
+                  📍 {m.lat}, {m.lng}
+                  <br />
+                  📏 {Math.round(d)} m
+
+                  <hr />
+
+                  {/* 📋 複製 */}
+                  <button
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(`${m.lat},${m.lng}`);
+                      alert("已複製座標");
+                    }}
+                  >
+                    📋 複製座標
+                  </button>
+
+                  <br />
+
+                  {/* 🧭 Google Maps */}
+                  <button
+                    onClick={async () => {
+                      const url = `https://www.google.com/maps?q=${m.lat},${m.lng}`;
+                      await navigator.clipboard.writeText(url);
+                      alert("已複製導航連結");
+                    }}
+                  >
+                    🧭 Google Maps
+                  </button>
+
+                  <br />
+
+                  {/* 🎯 移動 */}
+                  <button onClick={() => moveTo(m.lat, m.lng)}>
+                    🎯 移動到這裡
+                  </button>
+
+                </Popup>
+              </Marker>
+
+            </Fragment>
+          );
+        })}
 
       </MapContainer>
     </div>
   );
-                                }
+      }
