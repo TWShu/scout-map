@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -11,7 +11,6 @@ import {
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-
 import { db } from "./firebase";
 import { collection, onSnapshot, addDoc } from "firebase/firestore";
 
@@ -38,7 +37,6 @@ const mushroomIcon = L.divIcon({
 // ---------------- distance ----------------
 function getDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
-
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
 
@@ -49,6 +47,23 @@ function getDistance(lat1, lng1, lat2, lng2) {
       Math.sin(dLng / 2) ** 2;
 
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ---------------- direction arrow ----------------
+function getDirectionArrow(lat1, lng1, lat2, lng2) {
+  const dx = lng2 - lng1;
+  const dy = lat2 - lat1;
+
+  const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+  if (angle >= -22.5 && angle < 22.5) return "➡️";
+  if (angle >= 22.5 && angle < 67.5) return "↗️";
+  if (angle >= 67.5 && angle < 112.5) return "⬆️";
+  if (angle >= 112.5 && angle < 157.5) return "↖️";
+  if (angle >= -67.5 && angle < -22.5) return "↘️";
+  if (angle >= -112.5 && angle < -67.5) return "⬇️";
+  if (angle >= -157.5 && angle < -112.5) return "↙️";
+  return "⬅️";
 }
 
 // ---------------- MAIN ----------------
@@ -65,49 +80,79 @@ export default function App() {
 
   const [addMode, setAddMode] = useState(false);
 
+  // 🔥 多跟隨模式
+  const [followMode, setFollowMode] = useState("SMART"); 
+  // OFF / GPS / SMART
+
+  const lastCenterRef = useRef(null);
+
   // ---------------- GPS ----------------
   useEffect(() => {
     const id = navigator.geolocation.watchPosition((pos) => {
-      setGps({
+      const next = {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude
-      });
+      };
+
+      setGps(next);
+
+      const map = mapRef.current;
+
+      if (!map) return;
+
+      if (followMode === "GPS") {
+        map.setView(next);
+      }
+
+      if (followMode === "SMART") {
+        const last = lastCenterRef.current;
+
+        if (!last) {
+          lastCenterRef.current = next;
+          return;
+        }
+
+        const d = getDistance(last.lat, last.lng, next.lat, next.lng);
+
+        // 超過 30m 才跟
+        if (d > 30) {
+          map.setView(next);
+          lastCenterRef.current = next;
+        }
+      }
     });
 
     return () => navigator.geolocation.clearWatch(id);
-  }, []);
+  }, [followMode]);
 
   // ---------------- FIRESTORE ----------------
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "mushrooms"), (snap) => {
-      setMushrooms(
-        snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      );
+      setMushrooms(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
     return () => unsub();
   }, []);
 
   // ---------------- MOVE ----------------
-  const moveTo = (lat, lng, zoom = 19) => {
+  const moveTo = (lat, lng) => {
     const map = mapRef.current;
     if (!map) return;
-
-    map.stop();
-    map.setView([lat, lng], zoom, { animate: true });
+    map.setView([lat, lng], 19, { animate: true });
   };
 
   const returnToMe = () => {
-    moveTo(gps.lat, gps.lng, 18);
+    moveTo(gps.lat, gps.lng);
+    setFollowMode("GPS");
   };
 
-  // ---------------- ADD MODE ----------------
+  // ---------------- ADD ----------------
   function AddMushroom() {
     useMapEvents({
       async click(e) {
         if (!addMode) return;
 
-        const name = window.prompt("菇點名稱", "新菇點");
+        const name = prompt("菇點名稱");
         if (!name) return;
 
         await addDoc(collection(db, "mushrooms"), {
@@ -132,7 +177,7 @@ export default function App() {
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
 
-      {/* ================= FIXED UI LAYER ================= */}
+      {/* ================= CONTROL ================= */}
       <div style={{
         position: "fixed",
         top: 10,
@@ -140,38 +185,27 @@ export default function App() {
         zIndex: 999999,
         display: "flex",
         flexDirection: "column",
-        gap: 10
+        gap: 8
       }}>
 
-        {/* 🎯 回到我 */}
-        <button
-          onClick={returnToMe}
-          style={{
-            padding: "10px",
-            background: "white",
-            border: "1px solid #ccc",
-            borderRadius: 8
-          }}
-        >
-          🎯 回到我
-        </button>
+        <button onClick={returnToMe}>🎯 回到我</button>
 
-        {/* 🍄 新增 */}
-        <button
-          onClick={() => setAddMode(v => !v)}
-          style={{
-            padding: "10px",
-            background: addMode ? "#d1ffd1" : "white",
-            border: "1px solid #ccc",
-            borderRadius: 8
-          }}
-        >
+        <button onClick={() => setAddMode(v => !v)}>
           {addMode ? "🍄 新增 ON" : "🍄 新增 OFF"}
         </button>
 
+        <button onClick={() =>
+          setFollowMode(m =>
+            m === "OFF" ? "GPS" :
+            m === "GPS" ? "SMART" :
+            "OFF"
+          )
+        }>
+          跟隨：{followMode}
+        </button>
       </div>
 
-      {/* ================= LIST ================= */}
+      {/* ================= LIST + ARROW ================= */}
       <div style={{
         position: "fixed",
         top: 120,
@@ -179,25 +213,29 @@ export default function App() {
         zIndex: 999999,
         background: "white",
         padding: 10,
-        width: 180,
-        maxHeight: 300,
-        overflowY: "auto",
-        border: "1px solid #ddd",
-        borderRadius: 8
+        width: 200,
+        maxHeight: 320,
+        overflowY: "auto"
       }}>
-        <b>🍄 菇點</b>
+        <b>🍄 菇點導航</b>
 
         {mushrooms.map(m => {
           const d = getDistance(gps.lat, gps.lng, m.lat, m.lng);
+          const arrow = getDirectionArrow(gps.lat, gps.lng, m.lat, m.lng);
 
           return (
             <div
               key={m.id}
               onClick={() => moveTo(m.lat, m.lng)}
-              style={{ cursor: "pointer", marginTop: 8 }}
+              style={{
+                cursor: "pointer",
+                marginTop: 10,
+                paddingBottom: 6,
+                borderBottom: "1px solid #eee"
+              }}
             >
-              {m.name}
-              <div style={{ fontSize: 11, opacity: 0.6 }}>
+              {arrow} {m.name}
+              <div style={{ fontSize: 12, opacity: 0.6 }}>
                 {Math.round(d)} m
               </div>
             </div>
@@ -223,24 +261,11 @@ export default function App() {
         {mushrooms.map(m => (
           <Fragment key={m.id}>
             <Circle center={[m.lat, m.lng]} radius={40} />
-
             <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
               <Popup>
                 <b>{m.name}</b>
                 <br />
                 📍 {m.lat}, {m.lng}
-
-                <br /><br />
-
-                <button
-                  onClick={async () => {
-                    const text = `${m.lat},${m.lng}`;
-                    await navigator.clipboard.writeText(text);
-                    alert("已複製座標");
-                  }}
-                >
-                  📋 複製座標
-                </button>
               </Popup>
             </Marker>
           </Fragment>
@@ -249,4 +274,4 @@ export default function App() {
       </MapContainer>
     </div>
   );
-}
+                                }
