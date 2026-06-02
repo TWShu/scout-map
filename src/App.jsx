@@ -15,10 +15,7 @@ import L from "leaflet";
 import {
   collection,
   onSnapshot,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc
+  addDoc
 } from "firebase/firestore";
 
 import { db } from "./firebase";
@@ -73,11 +70,8 @@ export default function App() {
 
   const [coordInput, setCoordInput] = useState("");
 
-  const [batchInput, setBatchInput] = useState("");
-  const [batchList, setBatchList] = useState([]);
-  const [batchOpen, setBatchOpen] = useState(true);
-  const [batchHeight, setBatchHeight] = useState(110);
-const [listHeight, setListHeight] = useState(300);
+  const [listHeight, setListHeight] = useState(300);
+
   const lastRef = useRef(null);
 
   // ---------------- parse ----------------
@@ -86,9 +80,6 @@ const [listHeight, setListHeight] = useState(300);
     if (!m) return null;
     return { lat: +m[1], lng: +m[2] };
   };
-
-  const parseBatch = (t) =>
-    t.split("\n").map(parseCoord).filter(Boolean);
 
   // ---------------- GPS ----------------
   useEffect(() => {
@@ -137,7 +128,7 @@ const [listHeight, setListHeight] = useState(300);
     return () => unsub();
   }, []);
 
-  // ---------------- MAP BIND ----------------
+  // ---------------- map bind ----------------
   function MapBinder() {
     const map = useMap();
     useEffect(() => {
@@ -146,7 +137,7 @@ const [listHeight, setListHeight] = useState(300);
     return null;
   }
 
-  // ---------------- MOVE ----------------
+  // ---------------- move ----------------
   const moveTo = (lat, lng) => {
     const map = mapRef.current;
     if (!map) return;
@@ -159,7 +150,6 @@ const [listHeight, setListHeight] = useState(300);
     setFollowMode("GPS");
   };
 
-  // ---------------- INPUT ----------------
   const goInput = () => {
     const r = parseCoord(coordInput);
     if (!r) return alert("格式錯誤");
@@ -170,7 +160,7 @@ const [listHeight, setListHeight] = useState(300);
     const r = parseCoord(coordInput);
     if (!r) return alert("格式錯誤");
 
-    const name = prompt("名稱");
+    const name = prompt("菇點名稱");
     if (!name) return;
 
     await addDoc(collection(db, "mushrooms"), {
@@ -180,31 +170,7 @@ const [listHeight, setListHeight] = useState(300);
     });
   };
 
-  // ---------------- BATCH ----------------
-  const previewBatch = () => {
-    setBatchList(parseBatch(batchInput));
-  };
-
-  const saveBatch = async () => {
-    if (!batchList.length) return alert("沒有資料");
-
-    const prefix = prompt("名稱前綴");
-    if (!prefix) return;
-
-    for (let i = 0; i < batchList.length; i++) {
-      await addDoc(collection(db, "mushrooms"), {
-        name: `${prefix}-${i + 1}`,
-        lat: batchList[i].lat,
-        lng: batchList[i].lng
-      });
-    }
-
-    alert("完成");
-    setBatchInput("");
-    setBatchList([]);
-  };
-
-  // ---------------- ADD ----------------
+  // ---------------- add mushroom ----------------
   function AddMushroom() {
     useMapEvents({
       async click(e) {
@@ -223,10 +189,15 @@ const [listHeight, setListHeight] = useState(300);
     return null;
   }
 
-  // ---------------- LOADING ----------------
   if (!ready || !gps) {
     return (
-      <div style={{ width: "100vw", height: "100vh", display: "flex", justifyContent: "center", alignItems: "center" }}>
+      <div style={{
+        width: "100vw",
+        height: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center"
+      }}>
         📡 GPS loading...
       </div>
     );
@@ -235,25 +206,27 @@ const [listHeight, setListHeight] = useState(300);
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
 
-      {/* CONTROL */}
+      {/* 控制面板 */}
       <div style={{
         position: "fixed",
         top: 10,
         right: 10,
         zIndex: 999999,
-        width: 260,
+        width: 200,
         display: "flex",
         flexDirection: "column",
-        gap: 6
+        gap: 4
       }}>
 
-        <button onClick={returnToMe}>🎯 回到我</button>
-
-        <button onClick={() => setAddMode(v => !v)}>
-          {addMode ? "🍄 新增 ON" : "🍄 新增 OFF"}
+        <button style={{ fontSize: 12 }} onClick={returnToMe}>
+          🎯 回到我
         </button>
 
-        <button onClick={() =>
+        <button style={{ fontSize: 12 }} onClick={() => setAddMode(v => !v)}>
+          {addMode ? "🍄 新增ON" : "🍄 新增OFF"}
+        </button>
+
+        <button style={{ fontSize: 12 }} onClick={() =>
           setFollowMode(m =>
             m === "OFF" ? "GPS" :
             m === "GPS" ? "SMART" :
@@ -263,200 +236,89 @@ const [listHeight, setListHeight] = useState(300);
           跟隨：{followMode}
         </button>
 
-        {/* SINGLE INPUT */}
         <div style={{ background: "#eee", padding: 6 }}>
           <input
             value={coordInput}
             onChange={(e) => setCoordInput(e.target.value)}
             placeholder="lat,lng"
-            style={{ width: "100%" }}
+            style={{ width: "100%", fontSize: 12 }}
           />
-          <button onClick={goInput}>🧭 移動</button>
-          <button onClick={createInput}>🍄 建立</button>
-        </div>
-
-        {/* BATCH */}
-        <div style={{ background: "#ddd", padding: 6 }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <b>📦 批量輸入</b>
-            <button onClick={() => setBatchOpen(v => !v)}>
-              {batchOpen ? "收合" : "展開"}
-            </button>
-          </div>
-
-          {batchOpen && (
-            <>
-              <textarea
-                value={batchInput}
-                onChange={(e) => setBatchInput(e.target.value)}
-                style={{
-                  width: "100%",
-                  height: batchHeight,
-                  resize: "none"
-                }}
-              />
-
-              <div
-                onMouseDown={(e) => {
-                  const startY = e.clientY;
-                  const startH = batchHeight;
-
-                  const move = (ev) => {
-                    setBatchHeight(Math.max(60, startH + ev.clientY - startY));
-                  };
-
-                  const up = () => {
-                    window.removeEventListener("mousemove", move);
-                    window.removeEventListener("mouseup", up);
-                  };
-
-                  window.addEventListener("mousemove", move);
-                  window.addEventListener("mouseup", up);
-                }}
-                style={{
-                  height: 6,
-                  background: "#888",
-                  cursor: "row-resize",
-                  marginTop: 4
-                }}
-              />
-
-              <button onClick={previewBatch}>👀 預覽</button>
-              <button onClick={saveBatch}>💾 儲存</button>
-
-              <div style={{ fontSize: 12 }}>
-                {batchList.map((p, i) => (
-                  <div key={i}>{i + 1}. {p.lat}, {p.lng}</div>
-                ))}
-              </div>
-            </>
-          )}
+          <button style={{ fontSize: 12 }} onClick={goInput}>移動</button>
+          <button style={{ fontSize: 12 }} onClick={createInput}>新增</button>
         </div>
       </div>
 
-      {/* 🧠 這個就是你消失的「菇點視窗」已修復 */}
-      <div
-  style={{
-    position: "fixed",
-    top: 330,
-    right: 10,
-    zIndex: 999999,
-    background: "white",
-    padding: 10,
-    width: 220,
-    borderRadius: 8,
-    boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
-  }}
->
-  <b>🍄 菇點列表 ({mushrooms.length})</b>
+      {/* 菇點列表（可縮放） */}
+      <div style={{
+        position: "fixed",
+        top: 260,
+        right: 10,
+        zIndex: 999999,
+        background: "white",
+        width: 200,
+        padding: 8,
+        borderRadius: 8
+      }}>
+        <b style={{ fontSize: 12 }}>🍄 菇點 ({mushrooms.length})</b>
 
-  <div
-    style={{
-      height: listHeight,
-      overflowY: "auto",
-      marginTop: 8
-    }}
-  >
-    {mushrooms.map((m) => {
+        <div style={{
+          height: listHeight,
+          overflowY: "auto",
+          marginTop: 6
+        }}>
+          {mushrooms.map(m => {
 
-      const distance = gps
-        ? Math.round(
-            getDistance(
-              gps.lat,
-              gps.lng,
-              Number(m.lat),
-              Number(m.lng)
-            )
-          )
-        : 0;
+            const d = gps
+              ? Math.round(getDistance(gps.lat, gps.lng, m.lat, m.lng))
+              : 0;
 
-      return (
-        <div
-          key={m.id}
-          onClick={() => moveTo(m.lat, m.lng)}
-          style={{
-            cursor: "pointer",
-            marginTop: 8,
-            borderBottom: "1px solid #ddd",
-            paddingBottom: 6
-          }}
-        >
-          <div>
-            🍄 {m.name}
-          </div>
-
-          <div
-            style={{
-              fontSize: 12,
-              color: "#666"
-            }}
-          >
-            📏 {distance}m
-          </div>
-
-          <div
-            style={{
-              fontSize: 11,
-              color: "#999"
-            }}
-          >
-            {m.lat}, {m.lng}
-          </div>
+            return (
+              <div
+                key={m.id}
+                onClick={() => moveTo(m.lat, m.lng)}
+                style={{
+                  cursor: "pointer",
+                  fontSize: 12,
+                  marginBottom: 6,
+                  borderBottom: "1px solid #ddd"
+                }}
+              >
+                🍄 {m.name}
+                <div style={{ fontSize: 10 }}>
+                  {d}m
+                </div>
+              </div>
+            );
+          })}
         </div>
-      );
-    })}
-  </div>
 
-  {/* 高度縮放條 */}
-  <div
-    onMouseDown={(e) => {
-      const startY = e.clientY;
-      const startHeight = listHeight;
+        {/* resize bar */}
+        <div
+          onMouseDown={(e) => {
+            const startY = e.clientY;
+            const startH = listHeight;
 
-      const move = (ev) => {
-        setListHeight(
-          Math.max(
-            120,
-            Math.min(
-              700,
-              startHeight +
-                (ev.clientY - startY)
-            )
-          )
-        );
-      };
+            const move = (ev) => {
+              setListHeight(Math.max(120, Math.min(700, startH + ev.clientY - startY)));
+            };
 
-      const up = () => {
-        window.removeEventListener(
-          "mousemove",
-          move
-        );
+            const up = () => {
+              window.removeEventListener("mousemove", move);
+              window.removeEventListener("mouseup", up);
+            };
 
-        window.removeEventListener(
-          "mouseup",
-          up
-        );
-      };
-
-      window.addEventListener(
-        "mousemove",
-        move
-      );
-
-      window.addEventListener(
-        "mouseup",
-        up
-      );
-    }}
-    style={{
-      marginTop: 8,
-      height: 8,
-      background: "#999",
-      borderRadius: 4,
-      cursor: "row-resize"
-    }}
-  />
-</div>
+            window.addEventListener("mousemove", move);
+            window.addEventListener("mouseup", up);
+          }}
+          style={{
+            height: 6,
+            background: "#888",
+            cursor: "row-resize",
+            marginTop: 6,
+            borderRadius: 4
+          }}
+        />
+      </div>
 
       {/* MAP */}
       <MapContainer
@@ -476,18 +338,17 @@ const [listHeight, setListHeight] = useState(300);
         {mushrooms.map(m => (
           <Fragment key={m.id}>
             <Circle center={[m.lat, m.lng]} radius={40} />
-            <Marker
-              position={[m.lat, m.lng]}
-              icon={mushroomIcon}
-            >
+            <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
               <Popup>
                 <b>{m.name}</b>
                 <br />
                 📍 {m.lat}, {m.lng}
                 <br />
-                <button onClick={() =>
-                  navigator.clipboard.writeText(`${m.lat},${m.lng}`)
-                }>
+                <button
+                  onClick={() =>
+                    navigator.clipboard.writeText(`${m.lat},${m.lng}`)
+                  }
+                >
                   📋 複製
                 </button>
               </Popup>
@@ -497,4 +358,4 @@ const [listHeight, setListHeight] = useState(300);
       </MapContainer>
     </div>
   );
-                  }
+      }
