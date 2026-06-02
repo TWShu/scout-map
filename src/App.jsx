@@ -335,7 +335,6 @@ const [listHeight, setListHeight] = useState(300);
       </div>
 
       {/* 🧠 這個就是你消失的「菇點視窗」已修復 */}
-      <div style={{
       <div
   style={{
     position: "fixed",
