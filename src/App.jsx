@@ -301,15 +301,63 @@ export default function App() {
                 padding: 5
               }}
             >
-              {mushrooms.map(m => (
-                <div
-                  key={m.id}
-                  onClick={() => moveTo(m.lat, m.lng)}
-                  style={{ cursor: "pointer", padding: 4 }}
-                >
-                  🍄 {m.name}
-                </div>
-              ))}
+{mushrooms.map(m => (
+  <div
+    key={m.id}
+    style={{
+      padding: 6,
+      borderBottom: "1px solid #444"
+    }}
+  >
+    {/* 名稱（點了移動） */}
+    <div
+      onClick={() => moveTo(m.lat, m.lng)}
+      style={{
+        cursor: "pointer",
+        fontSize: 12,
+        color: "white"
+      }}
+    >
+      🍄 {m.name}
+    </div>
+
+    {/* 座標 */}
+    <div style={{ fontSize: 10, color: "#aaa" }}>
+      {m.lat.toFixed(5)}, {m.lng.toFixed(5)}
+    </div>
+
+    {/* ACTIONS */}
+    <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+
+      {/* 📍 移動 */}
+      <button
+        onClick={() => moveTo(m.lat, m.lng)}
+        style={{
+          fontSize: 10,
+          padding: "2px 4px",
+          cursor: "pointer"
+        }}
+      >
+        🧭
+      </button>
+
+      {/* 📋 複製座標 */}
+      <button
+        onClick={() => {
+          navigator.clipboard.writeText(`${m.lat},${m.lng}`);
+        }}
+        style={{
+          fontSize: 10,
+          padding: "2px 4px",
+          cursor: "pointer"
+        }}
+      >
+        📋
+      </button>
+
+    </div>
+  </div>
+))}
             </div>
 
             {/* RESIZE */}
