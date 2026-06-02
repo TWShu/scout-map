@@ -57,7 +57,7 @@ function getDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ---------------- MAP CLICK ADD (修復重點) ----------------
+// ---------------- MAP CLICK ADD ----------------
 function MapAddHandler({ addMode }) {
   useMapEvents({
     async click(e) {
@@ -92,8 +92,8 @@ export default function App() {
 
   const [input, setInput] = useState("");
 
+  // ⭐ TRUE = 展開 / FALSE = 收合
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarWidth] = useState(260);
 
   const [panelHeight, setPanelHeight] = useState(260);
 
@@ -153,7 +153,7 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // ---------------- map bind ----------------
+  // ---------------- MAP BIND ----------------
   function MapBinder() {
     const map = useMap();
     useEffect(() => {
@@ -194,7 +194,6 @@ export default function App() {
     });
   };
 
-  // ---------------- loading ----------------
   if (!ready || !gps) {
     return (
       <div style={{
@@ -208,140 +207,121 @@ export default function App() {
     );
   }
 
-  const sidebarActualWidth = sidebarOpen ? sidebarWidth : sidebarWidth / 2;
-
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
 
       {/* ================= SIDEBAR ================= */}
-      <div style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        height: "100vh",
-        width: sidebarActualWidth,
-        background: "#1e1e1e",
-        color: "white",
-        zIndex: 999999,
-        overflow: "hidden"
-      }}>
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          height: "100vh",
+          width: sidebarOpen ? 260 : 0,   // 🔥 核心修正
+          overflow: "hidden",
+          background: "#1e1e1e",
+          color: "white",
+          zIndex: 999999,
+          transition: "0.2s"
+        }}
+      >
 
+        {/* TOGGLE BUTTON（永遠可見） */}
         <div
           onClick={() => setSidebarOpen(v => !v)}
           style={{
-            padding: 10,
+            position: "absolute",
+            top: 0,
+            right: -40,
+            width: 40,
+            height: 40,
             background: "#333",
-            textAlign: "center",
-            cursor: "pointer",
-            fontSize: 12
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer"
           }}
         >
-          {sidebarOpen ? "⬅ 收合" : "➡ 展開"}
+          {sidebarOpen ? "⮜" : "⮞"}
         </div>
 
-        <div style={{ padding: 10 }}>
+        {/* CONTENT */}
+        {sidebarOpen && (
+          <div style={{ padding: 10 }}>
 
-          <b>📍 GPS</b>
-          <div style={{ fontSize: 12 }}>
-            {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}
-          </div>
+            <b>📍 GPS</b>
+            <div style={{ fontSize: 12 }}>
+              {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}
+            </div>
 
-          <button onClick={returnToMe} style={{ width: "100%", marginTop: 5 }}>
-            🎯 回到我
-          </button>
-
-          <button
-            onClick={() =>
-              setFollowMode(m =>
-                m === "OFF" ? "GPS" :
-                m === "GPS" ? "SMART" :
-                "OFF"
-              )
-            }
-            style={{ width: "100%", marginTop: 5 }}
-          >
-            跟隨：{followMode}
-          </button>
-
-          <div style={{ marginTop: 10 }}>
-            <b>🧰 工具</b>
-
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="lat,lng"
-              style={{ width: "100%", marginTop: 5 }}
-            />
-
-            <button onClick={goInput} style={{ width: "100%", marginTop: 5 }}>
-              🧭 移動
-            </button>
-
-            <button onClick={create} style={{ width: "100%", marginTop: 5 }}>
-              🍄 新增
+            <button onClick={returnToMe} style={{ width: "100%", marginTop: 5 }}>
+              🎯 回到我
             </button>
 
             <button
-              onClick={() => setAddMode(v => !v)}
+              onClick={() =>
+                setFollowMode(m =>
+                  m === "OFF" ? "GPS" :
+                  m === "GPS" ? "SMART" :
+                  "OFF"
+                )
+              }
               style={{ width: "100%", marginTop: 5 }}
             >
-              {addMode ? "新增ON" : "新增OFF"}
+              跟隨：{followMode}
             </button>
-          </div>
 
-          <div style={{ marginTop: 10 }}>
-            <b>🍄 菇點</b>
+            <div style={{ marginTop: 10 }}>
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="lat,lng"
+                style={{ width: "100%" }}
+              />
 
-            <div
-              style={{
-                height: panelHeight,
-                overflowY: "auto",
-                background: "#2a2a2a",
-                padding: 5,
-                marginTop: 5,
-                fontSize: 12
-              }}
-            >
-              {mushrooms.map(m => (
-                <div
-                  key={m.id}
-                  onClick={() => moveTo(m.lat, m.lng)}
-                  style={{ cursor: "pointer", padding: 4 }}
-                >
-                  🍄 {m.name}
-                </div>
-              ))}
+              <button onClick={goInput} style={{ width: "100%", marginTop: 5 }}>
+                🧭 移動
+              </button>
+
+              <button onClick={create} style={{ width: "100%", marginTop: 5 }}>
+                🍄 新增
+              </button>
+
+              <button
+                onClick={() => setAddMode(v => !v)}
+                style={{ width: "100%", marginTop: 5 }}
+              >
+                {addMode ? "新增ON" : "新增OFF"}
+              </button>
             </div>
 
-            <div
-              onMouseDown={(e) => {
-                const startY = e.clientY;
-                const startH = panelHeight;
+            <div style={{ marginTop: 10 }}>
+              <b>🍄 菇點</b>
 
-                const move = (ev) => {
-                  setPanelHeight(
-                    Math.max(120, Math.min(700, startH + ev.clientY - startY))
-                  );
-                };
+              <div
+                style={{
+                  height: panelHeight,
+                  overflowY: "auto",
+                  background: "#2a2a2a",
+                  padding: 5,
+                  marginTop: 5,
+                  fontSize: 12
+                }}
+              >
+                {mushrooms.map(m => (
+                  <div
+                    key={m.id}
+                    onClick={() => moveTo(m.lat, m.lng)}
+                    style={{ cursor: "pointer", padding: 4 }}
+                  >
+                    🍄 {m.name}
+                  </div>
+                ))}
+              </div>
+            </div>
 
-                const up = () => {
-                  window.removeEventListener("mousemove", move);
-                  window.removeEventListener("mouseup", up);
-                };
-
-                window.addEventListener("mousemove", move);
-                window.addEventListener("mouseup", up);
-              }}
-              style={{
-                height: 8,
-                background: "#555",
-                cursor: "row-resize",
-                marginTop: 5
-              }}
-            />
           </div>
-
-        </div>
+        )}
       </div>
 
       {/* ================= MAP ================= */}
@@ -353,8 +333,6 @@ export default function App() {
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
         <MapBinder />
-
-        {/* ⭐ 這行就是修復點地圖新增 */}
         <MapAddHandler addMode={addMode} />
 
         <Marker position={[gps.lat, gps.lng]}>
@@ -372,7 +350,6 @@ export default function App() {
                 📍 {m.lat.toFixed(5)}, {m.lng.toFixed(5)}
 
                 <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-
                   <button onClick={() => moveTo(m.lat, m.lng)}>🧭</button>
 
                   <button
@@ -396,14 +373,12 @@ export default function App() {
                   >
                     ✏️
                   </button>
-
                 </div>
               </Popup>
             </Marker>
           </Fragment>
         ))}
-
       </MapContainer>
     </div>
   );
-      }
+}
