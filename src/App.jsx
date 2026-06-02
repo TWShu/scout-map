@@ -336,4 +336,74 @@ export default function App() {
         style={{ width: "100%", height: "100%" }}
       >
 
-        <TileLayer url="https://{s}.
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+
+        <MapBinder />
+        <AddMushroom />
+
+        {/* 玩家 */}
+        <Marker position={[gps.lat, gps.lng]}>
+          <Popup>你在這裡</Popup>
+        </Marker>
+
+        {/* 菇點 */}
+        {mushrooms.map(m => {
+          const d = getDistance(gps.lat, gps.lng, m.lat, m.lng);
+
+          return (
+            <Fragment key={m.id}>
+
+              <Circle center={[m.lat, m.lng]} radius={40} />
+
+              <Marker
+                position={[m.lat, m.lng]}
+                icon={mushroomIcon}
+                draggable
+                eventHandlers={{
+                  dragend: (e) => {
+                    const p = e.target.getLatLng();
+                    updatePosition(m.id, p.lat, p.lng);
+                  }
+                }}
+              >
+                <Popup>
+
+                  <b>{m.name}</b>
+                  <hr />
+
+                  📍 {m.lat}, {m.lng}
+                  <br />
+                  📏 {Math.round(d)} m
+
+                  <hr />
+
+                  <button onClick={() => updateName(m.id, m.name)}>
+                    ✏️ 修改名稱
+                  </button>
+
+                  <button onClick={() => deleteMushroom(m.id)}>
+                    ❌ 刪除
+                  </button>
+
+                  <br /><br />
+
+                  <button
+                    onClick={() =>
+                      navigator.clipboard.writeText(`${m.lat},${m.lng}`)
+                    }
+                  >
+                    📋 複製座標
+                  </button>
+
+                </Popup>
+
+              </Marker>
+
+            </Fragment>
+          );
+        })}
+
+      </MapContainer>
+    </div>
+  );
+        }
