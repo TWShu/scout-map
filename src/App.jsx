@@ -77,7 +77,6 @@ function MapAddHandler({ addMode }) {
   return null;
 }
 
-// ---------------- MAIN ----------------
 export default function App() {
 
   const mapRef = useRef(null);
@@ -92,10 +91,8 @@ export default function App() {
 
   const [input, setInput] = useState("");
 
-  // ⭐ TRUE = 展開 / FALSE = 收合
+  // ⭐ sidebar state
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  const [panelHeight, setPanelHeight] = useState(260);
 
   const lastRef = useRef(null);
 
@@ -153,7 +150,6 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // ---------------- MAP BIND ----------------
   function MapBinder() {
     const map = useMap();
     useEffect(() => {
@@ -217,7 +213,7 @@ export default function App() {
           top: 0,
           left: 0,
           height: "100vh",
-          width: sidebarOpen ? 260 : 0,   // 🔥 核心修正
+          width: sidebarOpen ? 260 : 0,   // 🔥 正確收合
           overflow: "hidden",
           background: "#1e1e1e",
           color: "white",
@@ -226,26 +222,7 @@ export default function App() {
         }}
       >
 
-        {/* TOGGLE BUTTON（永遠可見） */}
-        <div
-          onClick={() => setSidebarOpen(v => !v)}
-          style={{
-            position: "absolute",
-            top: 0,
-            right: -40,
-            width: 40,
-            height: 40,
-            background: "#333",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer"
-          }}
-        >
-          {sidebarOpen ? "⮜" : "⮞"}
-        </div>
-
-        {/* CONTENT */}
+        {/* CONTENT（只在開啟時顯示） */}
         {sidebarOpen && (
           <div style={{ padding: 10 }}>
 
@@ -295,33 +272,26 @@ export default function App() {
               </button>
             </div>
 
-            <div style={{ marginTop: 10 }}>
-              <b>🍄 菇點</b>
-
-              <div
-                style={{
-                  height: panelHeight,
-                  overflowY: "auto",
-                  background: "#2a2a2a",
-                  padding: 5,
-                  marginTop: 5,
-                  fontSize: 12
-                }}
-              >
-                {mushrooms.map(m => (
-                  <div
-                    key={m.id}
-                    onClick={() => moveTo(m.lat, m.lng)}
-                    style={{ cursor: "pointer", padding: 4 }}
-                  >
-                    🍄 {m.name}
-                  </div>
-                ))}
-              </div>
-            </div>
-
           </div>
         )}
+      </div>
+
+      {/* ================= TOGGLE BUTTON（永遠存在） ================= */}
+      <div
+        onClick={() => setSidebarOpen(v => !v)}
+        style={{
+          position: "fixed",
+          top: 10,
+          left: sidebarOpen ? 260 : 0,
+          zIndex: 1000000,
+          background: "#333",
+          color: "white",
+          padding: "8px 10px",
+          cursor: "pointer",
+          borderRadius: 4
+        }}
+      >
+        {sidebarOpen ? "⮜" : "⮞"}
       </div>
 
       {/* ================= MAP ================= */}
@@ -378,7 +348,8 @@ export default function App() {
             </Marker>
           </Fragment>
         ))}
+
       </MapContainer>
     </div>
   );
-}
+        }
