@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -63,6 +63,7 @@ function getDistance(lat1, lng1, lat2, lng2) {
 function getArrow(lat1, lng1, lat2, lng2) {
   const dx = lng2 - lng1;
   const dy = lat2 - lat1;
+
   const angle = Math.atan2(dy, dx) * 180 / Math.PI;
 
   if (angle >= -22.5 && angle < 22.5) return "➡️";
@@ -86,51 +87,65 @@ export default function App() {
   });
 
   const [mushrooms, setMushrooms] = useState([]);
+
   const [addMode, setAddMode] = useState(false);
-  const [search, setSearch] = useState("");
+
+  const [followMode, setFollowMode] = useState("SMART");
+
+  const lastRef = useRef(null);
 
   // ---------------- GPS ----------------
   useEffect(() => {
     const id = navigator.geolocation.watchPosition((pos) => {
-      setGps({
+      const next = {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude
-      });
+      };
+
+      setGps(next);
+
+      const map = mapRef.current;
+      if (!map) return;
+
+      if (followMode === "GPS") {
+        map.setView(next);
+      }
+
+      if (followMode === "SMART") {
+        const last = lastRef.current;
+
+        if (!last) {
+          lastRef.current = next;
+          return;
+        }
+
+        const d = getDistance(last.lat, last.lng, next.lat, next.lng);
+
+        if (d > 30) {
+          map.setView(next);
+          lastRef.current = next;
+        }
+      }
     });
 
     return () => navigator.geolocation.clearWatch(id);
-  }, []);
+  }, [followMode]);
 
   // ---------------- FIRESTORE ----------------
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "mushrooms"), (snap) => {
-      setMushrooms(
-        snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      );
+      setMushrooms(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
     return () => unsub();
   }, []);
 
   // ---------------- CRUD ----------------
-  const addMushroom = async (lat, lng) => {
-    const name = prompt("菇點名稱");
-    if (!name) return;
-
-    await addDoc(collection(db, "mushrooms"), {
-      name,
-      lat,
-      lng
-    });
-  };
-
   const updateName = async (id, name) => {
     const next = prompt("修改名稱", name);
     if (!next) return;
 
-    await updateDoc(doc(db, "mushrooms", id), {
-      name: next
-    });
+    await updateDoc(doc(db, "mushrooms", id), { name: next });
   };
 
   const deleteMushroom = async (id) => {
@@ -142,27 +157,35 @@ export default function App() {
     await updateDoc(doc(db, "mushrooms", id), { lat, lng });
   };
 
-  // ---------------- FILTER ----------------
-  const filtered = useMemo(() => {
-    return mushrooms.filter(m =>
-      m.name.toLowerCase().includes(search.toLowerCase())
-    );
-  }, [mushrooms, search]);
-
   // ---------------- MOVE ----------------
   const moveTo = (lat, lng) => {
     const map = mapRef.current;
     if (!map) return;
-    map.setView([lat, lng], 19);
+    map.setView([lat, lng], 19, { animate: true });
   };
 
-  // ---------------- MAP EVENTS ----------------
-  function MapEvents() {
+  const returnToMe = () => {
+    moveTo(gps.lat, gps.lng);
+    setFollowMode("GPS");
+  };
+
+  // ---------------- ADD ----------------
+  function AddMushroom() {
     useMapEvents({
-      click(e) {
-        if (addMode) addMushroom(e.latlng.lat, e.latlng.lng);
+      async click(e) {
+        if (!addMode) return;
+
+        const name = prompt("菇點名稱");
+        if (!name) return;
+
+        await addDoc(collection(db, "mushrooms"), {
+          name,
+          lat: e.latlng.lat,
+          lng: e.latlng.lng
+        });
       }
     });
+
     return null;
   }
 
@@ -177,37 +200,39 @@ export default function App() {
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
 
-      {/* ================= NAV ================= */}
+      {/* ================= CONTROL ================= */}
       <div style={{
         position: "fixed",
         top: 10,
         right: 10,
         zIndex: 999999,
-        background: "white",
-        padding: 10,
-        width: 220
+        display: "flex",
+        flexDirection: "column",
+        gap: 8
       }}>
-        <b>🍄 菇點管理</b>
 
-        <input
-          placeholder="搜尋菇點"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ width: "100%", marginTop: 8 }}
-        />
+        <button onClick={returnToMe}>🎯 回到我</button>
 
-        <button
-          onClick={() => setAddMode(v => !v)}
-          style={{ marginTop: 8 }}
-        >
-          {addMode ? "新增 ON" : "新增 OFF"}
+        <button onClick={() => setAddMode(v => !v)}>
+          {addMode ? "🍄 新增 ON" : "🍄 新增 OFF"}
         </button>
+
+        <button onClick={() =>
+          setFollowMode(m =>
+            m === "OFF" ? "GPS" :
+            m === "GPS" ? "SMART" :
+            "OFF"
+          )
+        }>
+          跟隨：{followMode}
+        </button>
+
       </div>
 
-      {/* ================= LIST ================= */}
+      {/* ================= NAV LIST ================= */}
       <div style={{
         position: "fixed",
-        top: 150,
+        top: 120,
         right: 10,
         zIndex: 999999,
         background: "white",
@@ -216,9 +241,9 @@ export default function App() {
         maxHeight: 320,
         overflowY: "auto"
       }}>
-        <b>📍 菇點列表</b>
+        <b>🍄 菇點導航</b>
 
-        {filtered.map(m => {
+        {mushrooms.map(m => {
           const d = getDistance(gps.lat, gps.lng, m.lat, m.lng);
           const arrow = getArrow(gps.lat, gps.lng, m.lat, m.lng);
 
@@ -226,7 +251,7 @@ export default function App() {
             <div
               key={m.id}
               onClick={() => moveTo(m.lat, m.lng)}
-              style={{ marginTop: 10, cursor: "pointer" }}
+              style={{ cursor: "pointer", marginTop: 10 }}
             >
               {arrow} {m.name}
               <div style={{ fontSize: 12 }}>
@@ -247,13 +272,15 @@ export default function App() {
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
         <MapBinder />
-        <MapEvents />
+        <AddMushroom />
 
+        {/* 玩家 */}
         <Marker position={[gps.lat, gps.lng]}>
           <Popup>你在這裡</Popup>
         </Marker>
 
-        {filtered.map(m => {
+        {/* 菇點 */}
+        {mushrooms.map(m => {
           const d = getDistance(gps.lat, gps.lng, m.lat, m.lng);
 
           return (
@@ -284,7 +311,7 @@ export default function App() {
                   <hr />
 
                   <button onClick={() => updateName(m.id, m.name)}>
-                    ✏️ 修改
+                    ✏️ 修改名稱
                   </button>
 
                   <button onClick={() => deleteMushroom(m.id)}>
@@ -294,9 +321,10 @@ export default function App() {
                   <br /><br />
 
                   <button
-                    onClick={() =>
-                      navigator.clipboard.writeText(`${m.lat},${m.lng}`)
-                    }
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(`${m.lat},${m.lng}`);
+                      alert("已複製座標");
+                    }}
                   >
                     📋 複製座標
                   </button>
@@ -312,4 +340,4 @@ export default function App() {
       </MapContainer>
     </div>
   );
-                                    }
+}
