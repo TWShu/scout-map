@@ -46,7 +46,6 @@ const mushroomIcon = L.divIcon({
 // ---------------- distance ----------------
 function getDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
-
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
 
@@ -72,25 +71,24 @@ export default function App() {
   const [addMode, setAddMode] = useState(false);
   const [followMode, setFollowMode] = useState("SMART");
 
-  // ================= INPUT =================
   const [coordInput, setCoordInput] = useState("");
 
   const [batchInput, setBatchInput] = useState("");
   const [batchList, setBatchList] = useState([]);
   const [batchOpen, setBatchOpen] = useState(true);
-  const [batchHeight, setBatchHeight] = useState(100);
+  const [batchHeight, setBatchHeight] = useState(110);
 
   const lastRef = useRef(null);
 
   // ---------------- parse ----------------
-  const parseCoord = (text) => {
-    const m = text.trim().match(/(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/);
+  const parseCoord = (t) => {
+    const m = t.trim().match(/(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/);
     if (!m) return null;
     return { lat: +m[1], lng: +m[2] };
   };
 
-  const parseBatch = (text) =>
-    text.split("\n").map(parseCoord).filter(Boolean);
+  const parseBatch = (t) =>
+    t.split("\n").map(parseCoord).filter(Boolean);
 
   // ---------------- GPS ----------------
   useEffect(() => {
@@ -121,7 +119,6 @@ export default function App() {
         }
 
         const d = getDistance(last.lat, last.lng, next.lat, next.lng);
-
         if (d > 30) {
           map.setView(next);
           lastRef.current = next;
@@ -132,16 +129,15 @@ export default function App() {
     return () => navigator.geolocation.clearWatch(id);
   }, [followMode]);
 
-  // ---------------- FIREBASE ----------------
+  // ---------------- FIRESTORE ----------------
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "mushrooms"), (snap) => {
       setMushrooms(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
-
     return () => unsub();
   }, []);
 
-  // ---------------- MAP ----------------
+  // ---------------- MAP BIND ----------------
   function MapBinder() {
     const map = useMap();
     useEffect(() => {
@@ -150,7 +146,7 @@ export default function App() {
     return null;
   }
 
-  // ---------------- ACTIONS ----------------
+  // ---------------- MOVE ----------------
   const moveTo = (lat, lng) => {
     const map = mapRef.current;
     if (!map) return;
@@ -163,7 +159,7 @@ export default function App() {
     setFollowMode("GPS");
   };
 
-  // ---------------- SINGLE INPUT ----------------
+  // ---------------- INPUT ----------------
   const goInput = () => {
     const r = parseCoord(coordInput);
     if (!r) return alert("格式錯誤");
@@ -174,7 +170,7 @@ export default function App() {
     const r = parseCoord(coordInput);
     if (!r) return alert("格式錯誤");
 
-    const name = prompt("菇點名稱");
+    const name = prompt("名稱");
     if (!name) return;
 
     await addDoc(collection(db, "mushrooms"), {
@@ -203,12 +199,12 @@ export default function App() {
       });
     }
 
-    alert("批量完成");
+    alert("完成");
     setBatchInput("");
     setBatchList([]);
   };
 
-  // ---------------- ADD CLICK ----------------
+  // ---------------- ADD ----------------
   function AddMushroom() {
     useMapEvents({
       async click(e) {
@@ -227,28 +223,10 @@ export default function App() {
     return null;
   }
 
-  // ---------------- CRUD ----------------
-  const updateName = async (id, name) => {
-    const n = prompt("修改名稱", name);
-    if (!n) return;
-    await updateDoc(doc(db, "mushrooms", id), { name: n });
-  };
-
-  const deleteM = async (id) => {
-    if (!confirm("刪除？")) return;
-    await deleteDoc(doc(db, "mushrooms", id));
-  };
-
   // ---------------- LOADING ----------------
   if (!ready || !gps) {
     return (
-      <div style={{
-        width: "100vw",
-        height: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center"
-      }}>
+      <div style={{ width: "100vw", height: "100vh", display: "flex", justifyContent: "center", alignItems: "center" }}>
         📡 GPS loading...
       </div>
     );
@@ -288,9 +266,9 @@ export default function App() {
         {/* SINGLE INPUT */}
         <div style={{ background: "#eee", padding: 6 }}>
           <input
-            placeholder="lat,lng"
             value={coordInput}
             onChange={(e) => setCoordInput(e.target.value)}
+            placeholder="lat,lng"
             style={{ width: "100%" }}
           />
           <button onClick={goInput}>🧭 移動</button>
@@ -299,7 +277,6 @@ export default function App() {
 
         {/* BATCH */}
         <div style={{ background: "#ddd", padding: 6 }}>
-
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <b>📦 批量輸入</b>
             <button onClick={() => setBatchOpen(v => !v)}>
@@ -319,7 +296,6 @@ export default function App() {
                 }}
               />
 
-              {/* resize handle */}
               <div
                 onMouseDown={(e) => {
                   const startY = e.clientY;
@@ -339,7 +315,7 @@ export default function App() {
                 }}
                 style={{
                   height: 6,
-                  background: "#999",
+                  background: "#888",
                   cursor: "row-resize",
                   marginTop: 4
                 }}
@@ -350,14 +326,40 @@ export default function App() {
 
               <div style={{ fontSize: 12 }}>
                 {batchList.map((p, i) => (
-                  <div key={i}>
-                    {i + 1}. {p.lat}, {p.lng}
-                  </div>
+                  <div key={i}>{i + 1}. {p.lat}, {p.lng}</div>
                 ))}
               </div>
             </>
           )}
         </div>
+      </div>
+
+      {/* 🧠 這個就是你消失的「菇點視窗」已修復 */}
+      <div style={{
+        position: "fixed",
+        top: 330,
+        right: 10,
+        zIndex: 999999,
+        background: "white",
+        padding: 10,
+        width: 220,
+        maxHeight: 300,
+        overflowY: "auto"
+      }}>
+        <b>🍄 菇點列表</b>
+
+        {mushrooms.map(m => (
+          <div
+            key={m.id}
+            onClick={() => moveTo(m.lat, m.lng)}
+            style={{ cursor: "pointer", marginTop: 8 }}
+          >
+            {m.name}
+            <div style={{ fontSize: 12 }}>
+              {m.lat}, {m.lng}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* MAP */}
@@ -378,22 +380,19 @@ export default function App() {
         {mushrooms.map(m => (
           <Fragment key={m.id}>
             <Circle center={[m.lat, m.lng]} radius={40} />
-
-            <Marker position={[m.lat, m.lng]} icon={L.divIcon({ html: "🍄" })}>
+            <Marker
+              position={[m.lat, m.lng]}
+              icon={mushroomIcon}
+            >
               <Popup>
                 <b>{m.name}</b>
-                <hr />
-
-                <button onClick={() => navigator.clipboard.writeText(`${m.lat},${m.lng}`)}>
+                <br />
+                📍 {m.lat}, {m.lng}
+                <br />
+                <button onClick={() =>
+                  navigator.clipboard.writeText(`${m.lat},${m.lng}`)
+                }>
                   📋 複製
-                </button>
-
-                <button onClick={() => updateName(m.id, m.name)}>
-                  ✏️ 改名
-                </button>
-
-                <button onClick={() => deleteM(m.id)}>
-                  ❌ 刪除
                 </button>
               </Popup>
             </Marker>
@@ -402,4 +401,4 @@ export default function App() {
       </MapContainer>
     </div>
   );
-}
+                  }
