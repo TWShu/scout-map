@@ -70,9 +70,11 @@ export default function App() {
 
   const [input, setInput] = useState("");
 
-  // ⭐ GIS Sidebar control
+  // ⭐ GIS Sidebar
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [sidebarWidth] = useState(260); // 原始寬度（固定）
+
+  const panelHeightRef = useRef(260);
   const [panelHeight, setPanelHeight] = useState(260);
 
   const lastRef = useRef(null);
@@ -106,6 +108,7 @@ export default function App() {
 
       if (followMode === "SMART") {
         const last = lastRef.current;
+
         if (!last) {
           lastRef.current = next;
           return;
@@ -122,7 +125,7 @@ export default function App() {
     return () => navigator.geolocation.clearWatch(id);
   }, [followMode]);
 
-  // ---------------- firestore ----------------
+  // ---------------- FIRESTORE ----------------
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "mushrooms"), (snap) => {
       setMushrooms(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -171,7 +174,6 @@ export default function App() {
     });
   };
 
-  // ---------------- add mode ----------------
   function AddMushroom() {
     useMapEvents({
       async click(e) {
@@ -198,17 +200,22 @@ export default function App() {
     );
   }
 
+  // 🔥 收合寬度 = 一半
+  const sidebarActualWidth = sidebarOpen
+    ? sidebarWidth
+    : sidebarWidth / 2;
+
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
 
-      {/* ================= GIS SIDEBAR ================= */}
+      {/* ================= SIDEBAR ================= */}
       <div
         style={{
           position: "fixed",
           top: 0,
           left: 0,
           height: "100vh",
-          width: sidebarOpen ? sidebarWidth : 40,
+          width: sidebarActualWidth,
           background: "#1e1e1e",
           color: "white",
           zIndex: 999999,
@@ -217,118 +224,124 @@ export default function App() {
         }}
       >
 
-        {/* toggle */}
+        {/* TOGGLE */}
         <div
           onClick={() => setSidebarOpen(v => !v)}
           style={{
             padding: 10,
             cursor: "pointer",
             background: "#333",
-            fontSize: 12
+            fontSize: 12,
+            textAlign: "center"
           }}
         >
-          {sidebarOpen ? "⬅ 收合" : "➡"}
+          {sidebarOpen ? "⬅ 收合" : "➡ 展開"}
         </div>
 
-        {!sidebarOpen ? null : (
-          <div style={{ padding: 10 }}>
+        {/* CONTENT */}
+        <div style={{ padding: 10 }}>
 
-            {/* GPS PANEL */}
-            <div style={{ marginBottom: 10 }}>
-              <b>📍 GPS</b>
-              <div style={{ fontSize: 12 }}>
-                {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}
-              </div>
-
-              <button onClick={returnToMe} style={{ width: "100%", marginTop: 5 }}>
-                🎯 回到我
-              </button>
-
-              <button onClick={() => setFollowMode(m =>
-                m === "OFF" ? "GPS" : m === "GPS" ? "SMART" : "OFF"
-              )} style={{ width: "100%", marginTop: 5 }}>
-                跟隨：{followMode}
-              </button>
+          {/* GPS */}
+          <div style={{ marginBottom: 10 }}>
+            <b>📍 GPS</b>
+            <div style={{ fontSize: 12 }}>
+              {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}
             </div>
 
-            {/* TOOL PANEL */}
-            <div style={{ marginBottom: 10 }}>
-              <b>🧰 工具</b>
+            <button onClick={returnToMe} style={{ width: "100%", marginTop: 5 }}>
+              🎯 回到我
+            </button>
 
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="lat,lng"
-                style={{ width: "100%", marginTop: 5 }}
-              />
-
-              <button onClick={goInput} style={{ width: "100%", marginTop: 5 }}>
-                🧭 移動
-              </button>
-
-              <button onClick={create} style={{ width: "100%", marginTop: 5 }}>
-                🍄 新增
-              </button>
-
-              <button onClick={() => setAddMode(v => !v)} style={{ width: "100%", marginTop: 5 }}>
-                {addMode ? "新增ON" : "新增OFF"}
-              </button>
-            </div>
-
-            {/* LIST PANEL */}
-            <div>
-              <b>🍄 菇點 ({mushrooms.length})</b>
-
-              <div
-                style={{
-                  height: panelHeight,
-                  overflowY: "auto",
-                  fontSize: 12,
-                  marginTop: 5,
-                  background: "#2a2a2a",
-                  padding: 5
-                }}
-              >
-                {mushrooms.map(m => (
-                  <div
-                    key={m.id}
-                    onClick={() => moveTo(m.lat, m.lng)}
-                    style={{ cursor: "pointer", padding: 4 }}
-                  >
-                    🍄 {m.name}
-                  </div>
-                ))}
-              </div>
-
-              {/* resize */}
-              <div
-                onMouseDown={(e) => {
-                  const startY = e.clientY;
-                  const startH = panelHeight;
-
-                  const move = (ev) => {
-                    setPanelHeight(Math.max(120, Math.min(700, startH + ev.clientY - startY)));
-                  };
-
-                  const up = () => {
-                    window.removeEventListener("mousemove", move);
-                    window.removeEventListener("mouseup", up);
-                  };
-
-                  window.addEventListener("mousemove", move);
-                  window.addEventListener("mouseup", up);
-                }}
-                style={{
-                  height: 8,
-                  background: "#555",
-                  marginTop: 5,
-                  cursor: "row-resize"
-                }}
-              />
-            </div>
-
+            <button onClick={() =>
+              setFollowMode(m =>
+                m === "OFF" ? "GPS" :
+                m === "GPS" ? "SMART" :
+                "OFF"
+              )
+            } style={{ width: "100%", marginTop: 5 }}>
+              跟隨：{followMode}
+            </button>
           </div>
-        )}
+
+          {/* TOOL */}
+          <div style={{ marginBottom: 10 }}>
+            <b>🧰 工具</b>
+
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="lat,lng"
+              style={{ width: "100%", marginTop: 5 }}
+            />
+
+            <button onClick={goInput} style={{ width: "100%", marginTop: 5 }}>
+              🧭 移動
+            </button>
+
+            <button onClick={create} style={{ width: "100%", marginTop: 5 }}>
+              🍄 新增
+            </button>
+
+            <button onClick={() => setAddMode(v => !v)} style={{ width: "100%", marginTop: 5 }}>
+              {addMode ? "新增ON" : "新增OFF"}
+            </button>
+          </div>
+
+          {/* LIST */}
+          <div>
+            <b>🍄 菇點 ({mushrooms.length})</b>
+
+            <div
+              style={{
+                height: panelHeight,
+                overflowY: "auto",
+                fontSize: 12,
+                marginTop: 5,
+                background: "#2a2a2a",
+                padding: 5
+              }}
+            >
+              {mushrooms.map(m => (
+                <div
+                  key={m.id}
+                  onClick={() => moveTo(m.lat, m.lng)}
+                  style={{ cursor: "pointer", padding: 4 }}
+                >
+                  🍄 {m.name}
+                </div>
+              ))}
+            </div>
+
+            {/* RESIZE */}
+            <div
+              onMouseDown={(e) => {
+                const startY = e.clientY;
+                const startH = panelHeight;
+
+                const move = (ev) => {
+                  const next = startH + ev.clientY - startY;
+                  const clamped = Math.max(120, Math.min(700, next));
+                  setPanelHeight(clamped);
+                };
+
+                const up = () => {
+                  window.removeEventListener("mousemove", move);
+                  window.removeEventListener("mouseup", up);
+                };
+
+                window.addEventListener("mousemove", move);
+                window.addEventListener("mouseup", up);
+              }}
+              style={{
+                height: 8,
+                background: "#555",
+                marginTop: 5,
+                cursor: "row-resize"
+              }}
+            />
+          </div>
+
+        </div>
       </div>
 
       {/* ================= MAP ================= */}
@@ -355,4 +368,4 @@ export default function App() {
       </MapContainer>
     </div>
   );
-                }
+}
