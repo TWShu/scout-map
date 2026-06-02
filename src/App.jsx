@@ -62,7 +62,6 @@ export default function App() {
 
   const [gps, setGps] = useState(null);
   const [ready, setReady] = useState(false);
-
   const [mushrooms, setMushrooms] = useState([]);
 
   const [addMode, setAddMode] = useState(false);
@@ -70,11 +69,11 @@ export default function App() {
 
   const [coordInput, setCoordInput] = useState("");
 
-  const [listHeight, setListHeight] = useState(300);
+  // ⭐ 這個是重點：列表高度
+  const [listHeight, setListHeight] = useState(260);
 
   const lastRef = useRef(null);
 
-  // ---------------- parse ----------------
   const parseCoord = (t) => {
     const m = t.trim().match(/(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/);
     if (!m) return null;
@@ -128,7 +127,6 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // ---------------- map bind ----------------
   function MapBinder() {
     const map = useMap();
     useEffect(() => {
@@ -137,7 +135,6 @@ export default function App() {
     return null;
   }
 
-  // ---------------- move ----------------
   const moveTo = (lat, lng) => {
     const map = mapRef.current;
     if (!map) return;
@@ -170,7 +167,6 @@ export default function App() {
     });
   };
 
-  // ---------------- add mushroom ----------------
   function AddMushroom() {
     useMapEvents({
       async click(e) {
@@ -191,13 +187,7 @@ export default function App() {
 
   if (!ready || !gps) {
     return (
-      <div style={{
-        width: "100vw",
-        height: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center"
-      }}>
+      <div style={{ display: "flex", height: "100vh", justifyContent: "center", alignItems: "center" }}>
         📡 GPS loading...
       </div>
     );
@@ -206,59 +196,57 @@ export default function App() {
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
 
-      {/* 控制面板 */}
+      {/* 控制 */}
       <div style={{
         position: "fixed",
         top: 10,
         right: 10,
         zIndex: 999999,
-        width: 200,
+        width: 180,
         display: "flex",
         flexDirection: "column",
         gap: 4
       }}>
 
-        <button style={{ fontSize: 12 }} onClick={returnToMe}>
+        <button style={{ fontSize: 11, padding: "4px" }} onClick={returnToMe}>
           🎯 回到我
         </button>
 
-        <button style={{ fontSize: 12 }} onClick={() => setAddMode(v => !v)}>
-          {addMode ? "🍄 新增ON" : "🍄 新增OFF"}
+        <button style={{ fontSize: 11, padding: "4px" }} onClick={() => setAddMode(v => !v)}>
+          {addMode ? "🍄 ON" : "🍄 OFF"}
         </button>
 
-        <button style={{ fontSize: 12 }} onClick={() =>
-          setFollowMode(m =>
-            m === "OFF" ? "GPS" :
-            m === "GPS" ? "SMART" :
-            "OFF"
-          )
+        <button style={{ fontSize: 11, padding: "4px" }} onClick={() =>
+          setFollowMode(m => m === "OFF" ? "GPS" : m === "GPS" ? "SMART" : "OFF")
         }>
           跟隨：{followMode}
         </button>
 
-        <div style={{ background: "#eee", padding: 6 }}>
+        <div style={{ background: "#eee", padding: 4 }}>
           <input
             value={coordInput}
             onChange={(e) => setCoordInput(e.target.value)}
             placeholder="lat,lng"
-            style={{ width: "100%", fontSize: 12 }}
+            style={{ width: "100%", fontSize: 11 }}
           />
-          <button style={{ fontSize: 12 }} onClick={goInput}>移動</button>
-          <button style={{ fontSize: 12 }} onClick={createInput}>新增</button>
+          <button style={{ fontSize: 11, padding: "4px" }} onClick={goInput}>移動</button>
+          <button style={{ fontSize: 11, padding: "4px" }} onClick={createInput}>新增</button>
         </div>
       </div>
 
-      {/* 菇點列表（可縮放） */}
+      {/* 菇點列表（可拖曳） */}
       <div style={{
         position: "fixed",
-        top: 260,
+        top: 240,
         right: 10,
         zIndex: 999999,
-        background: "white",
         width: 200,
+        background: "white",
+        borderRadius: 8,
         padding: 8,
-        borderRadius: 8
+        boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
       }}>
+
         <b style={{ fontSize: 12 }}>🍄 菇點 ({mushrooms.length})</b>
 
         <div style={{
@@ -266,40 +254,34 @@ export default function App() {
           overflowY: "auto",
           marginTop: 6
         }}>
-          {mushrooms.map(m => {
-
-            const d = gps
-              ? Math.round(getDistance(gps.lat, gps.lng, m.lat, m.lng))
-              : 0;
-
-            return (
-              <div
-                key={m.id}
-                onClick={() => moveTo(m.lat, m.lng)}
-                style={{
-                  cursor: "pointer",
-                  fontSize: 12,
-                  marginBottom: 6,
-                  borderBottom: "1px solid #ddd"
-                }}
-              >
-                🍄 {m.name}
-                <div style={{ fontSize: 10 }}>
-                  {d}m
-                </div>
-              </div>
-            );
-          })}
+          {mushrooms.map(m => (
+            <div
+              key={m.id}
+              onClick={() => moveTo(m.lat, m.lng)}
+              style={{
+                cursor: "pointer",
+                fontSize: 12,
+                padding: "4px 0",
+                borderBottom: "1px solid #eee"
+              }}
+            >
+              🍄 {m.name}
+            </div>
+          ))}
         </div>
 
-        {/* resize bar */}
+        {/* 🔥 真正可拖曳 resize bar */}
         <div
           onMouseDown={(e) => {
+            e.preventDefault();
+
             const startY = e.clientY;
             const startH = listHeight;
 
             const move = (ev) => {
-              setListHeight(Math.max(120, Math.min(700, startH + ev.clientY - startY)));
+              setListHeight(
+                Math.max(120, Math.min(600, startH + (ev.clientY - startY)))
+              );
             };
 
             const up = () => {
@@ -311,11 +293,11 @@ export default function App() {
             window.addEventListener("mouseup", up);
           }}
           style={{
-            height: 6,
-            background: "#888",
-            cursor: "row-resize",
+            height: 10,
             marginTop: 6,
-            borderRadius: 4
+            background: "#666",
+            borderRadius: 4,
+            cursor: "row-resize"
           }}
         />
       </div>
@@ -338,21 +320,7 @@ export default function App() {
         {mushrooms.map(m => (
           <Fragment key={m.id}>
             <Circle center={[m.lat, m.lng]} radius={40} />
-            <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
-              <Popup>
-                <b>{m.name}</b>
-                <br />
-                📍 {m.lat}, {m.lng}
-                <br />
-                <button
-                  onClick={() =>
-                    navigator.clipboard.writeText(`${m.lat},${m.lng}`)
-                  }
-                >
-                  📋 複製
-                </button>
-              </Popup>
-            </Marker>
+            <Marker position={[m.lat, m.lng]} icon={mushroomIcon} />
           </Fragment>
         ))}
       </MapContainer>
