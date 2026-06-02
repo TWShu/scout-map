@@ -15,7 +15,9 @@ import L from "leaflet";
 import {
   collection,
   onSnapshot,
-  addDoc
+  addDoc,
+  updateDoc,
+  doc
 } from "firebase/firestore";
 
 import { db } from "./firebase";
@@ -70,11 +72,9 @@ export default function App() {
 
   const [input, setInput] = useState("");
 
-  // ⭐ GIS Sidebar
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarWidth] = useState(260); // 原始寬度（固定）
+  const [sidebarWidth] = useState(260);
 
-  const panelHeightRef = useRef(260);
   const [panelHeight, setPanelHeight] = useState(260);
 
   const lastRef = useRef(null);
@@ -174,6 +174,7 @@ export default function App() {
     });
   };
 
+  // ---------------- ADD ----------------
   function AddMushroom() {
     useMapEvents({
       async click(e) {
@@ -200,10 +201,7 @@ export default function App() {
     );
   }
 
-  // 🔥 收合寬度 = 一半
-  const sidebarActualWidth = sidebarOpen
-    ? sidebarWidth
-    : sidebarWidth / 2;
+  const sidebarActualWidth = sidebarOpen ? sidebarWidth : sidebarWidth / 2;
 
   return (
     <div style={{ width: "100vw", height: "100vh" }}>
@@ -219,30 +217,27 @@ export default function App() {
           background: "#1e1e1e",
           color: "white",
           zIndex: 999999,
-          transition: "0.2s",
           overflow: "hidden"
         }}
       >
 
-        {/* TOGGLE */}
         <div
           onClick={() => setSidebarOpen(v => !v)}
           style={{
             padding: 10,
-            cursor: "pointer",
             background: "#333",
-            fontSize: 12,
-            textAlign: "center"
+            textAlign: "center",
+            cursor: "pointer",
+            fontSize: 12
           }}
         >
           {sidebarOpen ? "⬅ 收合" : "➡ 展開"}
         </div>
 
-        {/* CONTENT */}
         <div style={{ padding: 10 }}>
 
           {/* GPS */}
-          <div style={{ marginBottom: 10 }}>
+          <div>
             <b>📍 GPS</b>
             <div style={{ fontSize: 12 }}>
               {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}
@@ -252,19 +247,22 @@ export default function App() {
               🎯 回到我
             </button>
 
-            <button onClick={() =>
-              setFollowMode(m =>
-                m === "OFF" ? "GPS" :
-                m === "GPS" ? "SMART" :
-                "OFF"
-              )
-            } style={{ width: "100%", marginTop: 5 }}>
+            <button
+              onClick={() =>
+                setFollowMode(m =>
+                  m === "OFF" ? "GPS" :
+                  m === "GPS" ? "SMART" :
+                  "OFF"
+                )
+              }
+              style={{ width: "100%", marginTop: 5 }}
+            >
               跟隨：{followMode}
             </button>
           </div>
 
           {/* TOOL */}
-          <div style={{ marginBottom: 10 }}>
+          <div style={{ marginTop: 10 }}>
             <b>🧰 工具</b>
 
             <input
@@ -288,7 +286,7 @@ export default function App() {
           </div>
 
           {/* LIST */}
-          <div>
+          <div style={{ marginTop: 10 }}>
             <b>🍄 菇點 ({mushrooms.length})</b>
 
             <div
@@ -296,80 +294,31 @@ export default function App() {
                 height: panelHeight,
                 overflowY: "auto",
                 fontSize: 12,
-                marginTop: 5,
                 background: "#2a2a2a",
-                padding: 5
+                padding: 5,
+                marginTop: 5
               }}
             >
-{mushrooms.map(m => (
-  <div
-    key={m.id}
-    style={{
-      padding: 6,
-      borderBottom: "1px solid #444"
-    }}
-  >
-    {/* 名稱（點了移動） */}
-    <div
-      onClick={() => moveTo(m.lat, m.lng)}
-      style={{
-        cursor: "pointer",
-        fontSize: 12,
-        color: "white"
-      }}
-    >
-      🍄 {m.name}
-    </div>
-
-    {/* 座標 */}
-    <div style={{ fontSize: 10, color: "#aaa" }}>
-      {m.lat.toFixed(5)}, {m.lng.toFixed(5)}
-    </div>
-
-    {/* ACTIONS */}
-    <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
-
-      {/* 📍 移動 */}
-      <button
-        onClick={() => moveTo(m.lat, m.lng)}
-        style={{
-          fontSize: 10,
-          padding: "2px 4px",
-          cursor: "pointer"
-        }}
-      >
-        🧭
-      </button>
-
-      {/* 📋 複製座標 */}
-      <button
-        onClick={() => {
-          navigator.clipboard.writeText(`${m.lat},${m.lng}`);
-        }}
-        style={{
-          fontSize: 10,
-          padding: "2px 4px",
-          cursor: "pointer"
-        }}
-      >
-        📋
-      </button>
-
-    </div>
-  </div>
-))}
+              {mushrooms.map(m => (
+                <div
+                  key={m.id}
+                  onClick={() => moveTo(m.lat, m.lng)}
+                  style={{ cursor: "pointer", padding: 4 }}
+                >
+                  🍄 {m.name}
+                </div>
+              ))}
             </div>
 
-            {/* RESIZE */}
             <div
               onMouseDown={(e) => {
                 const startY = e.clientY;
                 const startH = panelHeight;
 
                 const move = (ev) => {
-                  const next = startH + ev.clientY - startY;
-                  const clamped = Math.max(120, Math.min(700, next));
-                  setPanelHeight(clamped);
+                  setPanelHeight(
+                    Math.max(120, Math.min(700, startH + ev.clientY - startY))
+                  );
                 };
 
                 const up = () => {
@@ -383,8 +332,8 @@ export default function App() {
               style={{
                 height: 8,
                 background: "#555",
-                marginTop: 5,
-                cursor: "row-resize"
+                cursor: "row-resize",
+                marginTop: 5
               }}
             />
           </div>
@@ -410,9 +359,47 @@ export default function App() {
         {mushrooms.map(m => (
           <Fragment key={m.id}>
             <Circle center={[m.lat, m.lng]} radius={40} />
-            <Marker position={[m.lat, m.lng]} icon={mushroomIcon} />
+
+            <Marker position={[m.lat, m.lng]} icon={mushroomIcon}>
+              <Popup>
+                <b>🍄 {m.name}</b>
+
+                <hr />
+
+                📍 {m.lat.toFixed(5)}, {m.lng.toFixed(5)}
+
+                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+
+                  <button onClick={() => moveTo(m.lat, m.lng)}>🧭</button>
+
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${m.lat},${m.lng}`);
+                      alert("已複製");
+                    }}
+                  >
+                    📋
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      const newName = prompt("修改名稱", m.name);
+                      if (!newName) return;
+
+                      await updateDoc(doc(db, "mushrooms", m.id), {
+                        name: newName
+                      });
+                    }}
+                  >
+                    ✏️
+                  </button>
+
+                </div>
+              </Popup>
+            </Marker>
           </Fragment>
         ))}
+
       </MapContainer>
     </div>
   );
